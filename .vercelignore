@@ -1,0 +1,6 @@
+# Allowlist: only the static site is uploaded/served. Everything else (.env, scripts, tooling) stays out.
+/*
+!index.html
+!js
+!docs
+!characters
