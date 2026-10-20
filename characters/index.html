@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Character Picker</title>
+<style>
+  :root { --ink:#111; --paper:#fff; --muted:#666; --line:#ddd; }
+  body { margin:0; background:var(--paper); color:var(--ink); font:16px/1.5 system-ui, sans-serif; }
+  main { max-width:1100px; margin:0 auto; padding:24px 16px 64px; }
+  h1 { margin:0 0 4px; font-size:28px; }
+  h2 { margin:40px 0 8px; font-size:20px; }
+  p.lead { color:var(--muted); margin:0 0 24px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:16px; }
+  figure { margin:0; border:2px solid var(--line); border-radius:10px; overflow:hidden; cursor:pointer; transition:border-color .15s; }
+  figure:hover { border-color:#999; }
+  figure.picked { border-color:var(--ink); box-shadow:0 0 0 3px var(--ink); }
+  figure img { width:100%; display:block; aspect-ratio:1; object-fit:contain; background:#fff; }
+  figcaption { padding:8px 12px; border-top:1px solid var(--line); display:flex; justify-content:space-between; gap:8px; }
+  figcaption b { font-variant-numeric:tabular-nums; }
+  #choice { position:sticky; bottom:0; background:var(--ink); color:var(--paper); padding:12px 16px; border-radius:10px; margin-top:24px; }
+  .room { border:2px solid var(--line); border-radius:10px; padding:12px; }
+  .room svg { width:100%; height:auto; display:block; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Pick your characters</h1>
+  <p class="lead">9 black &amp; white styles, each with a male and a female. Click one or two to pick them. You can also mix styles, e.g. the male from #3 and the female from #9.</p>
+
+  <div class="grid" id="grid"></div>
+  <div id="choice">Nothing picked yet</div>
+
+  <h2>How I read your room sketch</h2>
+  <div class="room">
+  <svg viewBox="0 0 520 340" font-family="system-ui" font-size="12">
+    <rect x="40" y="10" width="460" height="320" fill="none" stroke="#111" stroke-width="3"/>
+    <!-- door gap on left wall -->
+    <rect x="34" y="150" width="12" height="40" fill="#fff"/>
+    <text x="4" y="174" font-weight="700">DOOR</text>
+    <path d="M60 170 h40" stroke="#111" stroke-width="2" marker-end="url(#a)"/>
+    <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z"/></marker></defs>
+    <!-- Row A (near door): upper group 3, lower group 4 -->
+    <g stroke="#111" stroke-width="6" stroke-linecap="round">
+      <line x1="130" y1="35" x2="230" y2="35"/><line x1="130" y1="70" x2="230" y2="70"/><line x1="130" y1="105" x2="230" y2="105"/>
+      <line x1="130" y1="215" x2="230" y2="215"/><line x1="130" y1="250" x2="230" y2="250"/><line x1="130" y1="285" x2="230" y2="285"/><line x1="130" y1="315" x2="230" y2="315"/>
+    </g>
+    <!-- Row B (far side): 9 tables -->
+    <g stroke="#111" stroke-width="6" stroke-linecap="round">
+      <line x1="320" y1="30" x2="440" y2="30"/><line x1="320" y1="64" x2="440" y2="64"/><line x1="320" y1="98" x2="440" y2="98"/>
+      <line x1="320" y1="132" x2="440" y2="132"/><line x1="320" y1="166" x2="440" y2="166"/><line x1="320" y1="200" x2="440" y2="200"/>
+      <line x1="320" y1="234" x2="440" y2="234"/><line x1="320" y1="268" x2="440" y2="268"/><line x1="320" y1="306" x2="440" y2="306"/>
+    </g>
+    <text x="135" y="140" fill="#666">Row A, upper (3)</text>
+    <text x="135" y="200" fill="#666">Row A, lower (4)</text>
+    <text x="455" y="170" fill="#666" transform="rotate(90 455 170)">Row B (9)</text>
+    <text x="60" y="30" fill="#666">← your LEFT</text>
+    <text x="60" y="322" fill="#666">← your RIGHT</text>
+  </svg>
+  </div>
+  <p class="lead">When you walk in, you face the tables. The <b>top</b> of this map is your <b>left</b> and the <b>bottom</b> is your <b>right</b>. Row A is near the door and Row B is on the far side. Each row can be split into groups of 2–3 tables, and you'll set the real numbers later.</p>
+</main>
+<script>
+  const styles = [
+    ["01_classic_stick","Classic stick"],["02_bean_body","Bean body"],["03_xkcd_minimal","Minimal line"],
+    ["04_chibi","Chibi"],["05_silhouette","Silhouette pictogram"],["06_doodle_marker","Marker doodle"],
+    ["07_peanuts_comic","Comic strip"],["08_geometric","Geometric"],["09_lively_stick","Expressive stick"],
+  ];
+  const grid = document.getElementById("grid"), choice = document.getElementById("choice");
+  const picked = new Set();
+  styles.forEach(([file, name], i) => {
+    const f = document.createElement("figure");
+    f.innerHTML = `<img src="gemini/${file}.png" alt="${name}"><figcaption><span><b>#${i+1}</b> ${name}</span><span>M + F</span></figcaption>`;
+    f.onclick = () => {
+      picked.has(i) ? picked.delete(i) : picked.add(i);
+      f.classList.toggle("picked");
+      choice.textContent = picked.size ? "Tell Claude: I like " + [...picked].map(n => "#" + (n+1) + " " + styles[n][1]).join(", ") : "Nothing picked yet";
+    };
+    grid.appendChild(f);
+  });
+</script>
+</body>
+</html>

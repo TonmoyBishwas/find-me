@@ -1,0 +1,212 @@
+{
+  "total": 0.34854899999999994,
+  "calls": [
+    {
+      "name": "01_classic_stick",
+      "cost": 0.03873,
+      "saved": true,
+      "usage": {
+        "promptTokenCount": 99,
+        "candidatesTokenCount": 1290,
+        "totalTokenCount": 1389,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 99
+          }
+        ],
+        "candidatesTokensDetails": [
+          {
+            "modality": "IMAGE",
+            "tokenCount": 1290
+          }
+        ],
+        "serviceTier": "standard"
+      }
+    },
+    {
+      "name": "02_bean_body",
+      "cost": 0.03873,
+      "saved": true,
+      "usage": {
+        "promptTokenCount": 97,
+        "candidatesTokenCount": 1290,
+        "totalTokenCount": 1387,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 97
+          }
+        ],
+        "candidatesTokensDetails": [
+          {
+            "modality": "IMAGE",
+            "tokenCount": 1290
+          }
+        ],
+        "serviceTier": "standard"
+      }
+    },
+    {
+      "name": "03_xkcd_minimal",
+      "cost": 0.03873,
+      "saved": true,
+      "usage": {
+        "promptTokenCount": 93,
+        "candidatesTokenCount": 1290,
+        "totalTokenCount": 1383,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 93
+          }
+        ],
+        "candidatesTokensDetails": [
+          {
+            "modality": "IMAGE",
+            "tokenCount": 1290
+          }
+        ],
+        "serviceTier": "standard"
+      }
+    },
+    {
+      "name": "04_chibi",
+      "cost": 0.03873,
+      "saved": true,
+      "usage": {
+        "promptTokenCount": 88,
+        "candidatesTokenCount": 1290,
+        "totalTokenCount": 1378,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 88
+          }
+        ],
+        "candidatesTokensDetails": [
+          {
+            "modality": "IMAGE",
+            "tokenCount": 1290
+          }
+        ],
+        "serviceTier": "standard"
+      }
+    },
+    {
+      "name": "05_silhouette",
+      "cost": 0.03873,
+      "saved": true,
+      "usage": {
+        "promptTokenCount": 86,
+        "candidatesTokenCount": 1290,
+        "totalTokenCount": 1376,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 86
+          }
+        ],
+        "candidatesTokensDetails": [
+          {
+            "modality": "IMAGE",
+            "tokenCount": 1290
+          }
+        ],
+        "serviceTier": "standard"
+      }
+    },
+    {
+      "name": "06_doodle_marker",
+      "cost": 0.03873,
+      "saved": true,
+      "usage": {
+        "promptTokenCount": 93,
+        "candidatesTokenCount": 1290,
+        "totalTokenCount": 1383,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 93
+          }
+        ],
+        "candidatesTokensDetails": [
+          {
+            "modality": "IMAGE",
+            "tokenCount": 1290
+          }
+        ],
+        "serviceTier": "standard"
+      }
+    },
+    {
+      "name": "07_peanuts_comic",
+      "cost": 0.03873,
+      "saved": true,
+      "usage": {
+        "promptTokenCount": 92,
+        "candidatesTokenCount": 1290,
+        "totalTokenCount": 1382,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 92
+          }
+        ],
+        "candidatesTokensDetails": [
+          {
+            "modality": "IMAGE",
+            "tokenCount": 1290
+          }
+        ],
+        "serviceTier": "standard"
+      }
+    },
+    {
+      "name": "08_geometric",
+      "cost": 0.03873,
+      "saved": true,
+      "usage": {
+        "promptTokenCount": 89,
+        "candidatesTokenCount": 1290,
+        "totalTokenCount": 1379,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 89
+          }
+        ],
+        "candidatesTokensDetails": [
+          {
+            "modality": "IMAGE",
+            "tokenCount": 1290
+          }
+        ],
+        "serviceTier": "standard"
+      }
+    },
+    {
+      "name": "09_lively_stick",
+      "cost": 0.03873,
+      "saved": true,
+      "usage": {
+        "promptTokenCount": 93,
+        "candidatesTokenCount": 1290,
+        "totalTokenCount": 1383,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 93
+          }
+        ],
+        "candidatesTokensDetails": [
+          {
+            "modality": "IMAGE",
+            "tokenCount": 1290
+          }
+        ],
+        "serviceTier": "standard"
+      }
+    }
+  ]
+}
