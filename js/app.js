@@ -8,22 +8,35 @@ const phone = $("phone"), phoneCtx = phone.getContext("2d");
 const MAP_TOP = 70; // the map crops off the empty strip above the back wall
 
 let rooms = loadRooms();
-const state = { room: 0, seat: null, me: "m", friend: "f", crowd: true };
+
+// Who's who, the crowd toggle and the last room are remembered in this browser.
+const PREFS_KEY = "find-me.prefs.v1";
+function loadPrefs() {
+  try { return JSON.parse(localStorage.getItem(PREFS_KEY)) || {}; } catch { return {}; }
+}
+function savePrefs() {
+  const { room, me, friend, crowd } = state;
+  try { localStorage.setItem(PREFS_KEY, JSON.stringify({ room, me, friend, crowd })); } catch {}
+}
+const prefs = loadPrefs();
+const state = {
+  room: Math.max(0, Math.min(rooms.length - 1, prefs.room | 0)),
+  seat: null,
+  me: prefs.me === "f" ? "f" : "m",
+  friend: prefs.friend === "m" ? "m" : "f",
+  crowd: prefs.crowd !== false,
+};
 let scene = null, t0 = performance.now(), hoverId = null, gifFile = null, gifUrl = null;
 
-// ---- state <-> URL hash (a link reproduces the same animation) ----
+// ---- room + seat <-> URL hash (a link opens straight to that seat) ----
 function readHash() {
   const p = new URLSearchParams(location.hash.slice(1));
   if (p.has("room")) state.room = Math.max(0, Math.min(rooms.length - 1, +p.get("room") || 0));
   if (p.has("seat")) state.seat = p.get("seat");
-  if (["m", "f"].includes(p.get("me"))) state.me = p.get("me");
-  if (["m", "f"].includes(p.get("friend"))) state.friend = p.get("friend");
-  if (p.has("crowd")) state.crowd = p.get("crowd") !== "0";
 }
 function writeHash() {
-  const p = new URLSearchParams({ room: state.room, me: state.me, friend: state.friend });
+  const p = new URLSearchParams({ room: state.room });
   if (state.seat) p.set("seat", state.seat);
-  if (!state.crowd) p.set("crowd", "0");
   history.replaceState(null, "", "#" + p);
 }
 
@@ -34,6 +47,7 @@ function rebuild() {
   t0 = performance.now();
   clearGif();
   writeHash();
+  savePrefs();
   renderControls();
 }
 
@@ -139,7 +153,17 @@ $("share").onclick = async () => {
   }
 };
 
-// ---- room setup ----
+// ---- settings panel ----
+const settings = $("settings");
+$("openSettings").onclick = () => { renderEditors(); settings.showModal(); }; // unsaved room edits are dropped on reopen
+settings.addEventListener("click", (e) => { if (e.target === settings) settings.close(); }); // tap outside closes
+
+function flash(btn, text) {
+  const old = btn.dataset.label ??= btn.textContent;
+  btn.textContent = text;
+  clearTimeout(btn._t);
+  btn._t = setTimeout(() => (btn.textContent = old), 1500);
+}
 function renderEditors() {
   $("roomEditors").replaceChildren(...rooms.map((r) => {
     const d = document.createElement("div");
@@ -164,17 +188,19 @@ $("saveRooms").onclick = () => {
     return sanitizeRoom({ name: v("name"), rowA: { left: parseGroups(v("aLeft")), right: parseGroups(v("aRight")) }, rowB: parseGroups(v("b")), seatsPerSide: +v("seats") });
   });
   saveRooms(rooms); rebuild(); renderEditors();
+  flash($("saveRooms"), "Saved ✓");
 };
-$("resetRooms").onclick = () => { rooms = structuredClone(DEFAULT_ROOMS); saveRooms(rooms); state.seat = null; rebuild(); renderEditors(); };
+$("resetRooms").onclick = () => {
+  if (!confirm("Reset all rooms to the built-in layout? Your saved setup will be lost.")) return;
+  rooms = structuredClone(DEFAULT_ROOMS); saveRooms(rooms); state.seat = null; rebuild(); renderEditors();
+};
 $("copyRooms").onclick = async () => {
-  try { await navigator.clipboard.writeText(JSON.stringify(rooms, null, 2)); $("copyRooms").textContent = "Copied"; }
+  try { await navigator.clipboard.writeText(JSON.stringify(rooms, null, 2)); flash($("copyRooms"), "Copied"); }
   catch { prompt("Copy this:", JSON.stringify(rooms)); }
-  setTimeout(() => ($("copyRooms").textContent = "Copy JSON"), 1500);
 };
 
 // ---- boot ----
 readHash();
 $("crowd").checked = state.crowd;
-renderEditors();
 document.fonts.load(`24px ${FONT}`).finally(() => { rebuild(); requestAnimationFrame(frame); });
 window.__app = { get scene() { return scene; }, state, rebuild };

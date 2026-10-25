@@ -12,7 +12,7 @@
   :root { --ink:#111; --paper:#fff; --muted:#6b6b6b; --line:#d9d9d9; }
   * { box-sizing:border-box; }
   body { margin:0; background:var(--paper); color:var(--ink); font:15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  header { padding:18px 16px 6px; max-width:1200px; margin:0 auto; }
+  header { padding:18px 16px 6px; max-width:1200px; margin:0 auto; display:flex; gap:12px; align-items:flex-start; justify-content:space-between; }
   h1 { font:400 34px/1.1 "Patrick Hand", cursive; margin:0; }
   header p { margin:4px 0 0; color:var(--muted); }
   main { max-width:1200px; margin:0 auto; padding:12px 16px 48px; display:grid; grid-template-columns:minmax(0,1fr) 340px; gap:28px; align-items:start; }
@@ -35,8 +35,14 @@
   .phone { width:100%; max-width:340px; margin:0 auto; border:10px solid var(--ink); border-radius:28px; overflow:hidden; background:#fff; }
   .sticky { position:sticky; top:12px; }
   @media (max-width: 900px) { .sticky { position:static; } }
-  details { border:2px solid var(--line); border-radius:10px; padding:10px 12px; }
-  summary { cursor:pointer; font:400 20px "Patrick Hand", cursive; }
+  .icon-btn { flex:none; width:40px; height:40px; display:grid; place-items:center; border:2px solid var(--ink); border-radius:50%; background:var(--paper); color:var(--ink); cursor:pointer; padding:0; }
+  .icon-btn svg { width:22px; height:22px; }
+  dialog { width:min(560px, calc(100vw - 24px)); max-height:calc(100dvh - 24px); border:2px solid var(--ink); border-radius:14px; padding:0; background:var(--paper); color:var(--ink); }
+  dialog::backdrop { background:rgba(0,0,0,.45); }
+  .dlg-head { position:sticky; top:0; z-index:1; display:flex; justify-content:space-between; align-items:center; padding:12px 16px; background:var(--paper); border-bottom:1px solid var(--line); margin:0; }
+  .dlg-head h2 { font:400 26px/1 "Patrick Hand", cursive; margin:0; }
+  .dlg-body { padding:12px 16px 16px; display:flex; flex-direction:column; gap:18px; }
+  .dlg-body h3 { font:400 21px/1.2 "Patrick Hand", cursive; margin:0 0 8px; }
   .room-edit { border-top:1px solid var(--line); padding-top:10px; margin-top:10px; display:grid; grid-template-columns:auto 1fr; gap:6px 8px; align-items:center; }
   .room-edit input[type=text] { width:100%; }
   .room-edit .full { grid-column:1 / -1; }
@@ -46,8 +52,13 @@
 </head>
 <body>
 <header>
-  <h1>Find me in the study room</h1>
-  <p>Tap your seat, then send the GIF on WhatsApp. Your friend sees exactly where to walk.</p>
+  <div>
+    <h1>Find me in the study room</h1>
+    <p>Tap your seat, then send the GIF on WhatsApp. Your friend sees exactly where to walk.</p>
+  </div>
+  <button class="icon-btn" id="openSettings" aria-label="Settings" title="Settings">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+  </button>
 </header>
 <main>
   <div class="col">
@@ -61,26 +72,10 @@
       <p class="hint">The door is at the bottom, so the map's left is your left as you walk in.</p>
       <div class="directions" id="directions" style="margin-top:10px">No seat picked yet</div>
     </section>
-    <section>
-      <h2>3. Who's who</h2>
-      <div class="row"><span class="label">Me</span><div class="seg" data-who="me"><button data-g="m">Boy</button><button data-g="f">Girl</button></div></div>
-      <div class="row" style="margin-top:6px"><span class="label">Friend</span><div class="seg" data-who="friend"><button data-g="m">Boy</button><button data-g="f">Girl</button></div></div>
-      <label class="row" style="margin-top:10px"><input type="checkbox" id="crowd" checked> Show other students</label>
-    </section>
-    <details id="setup">
-      <summary>Set up rooms</summary>
-      <small class="muted">Group sizes go left to right with spaces between groups, e.g. <b>3 3 3</b>. "Front row" is the row nearest the door, split by the door into a left part and a right part.</small>
-      <div id="roomEditors"></div>
-      <div class="row" style="margin-top:10px">
-        <button class="btn primary" id="saveRooms">Save</button>
-        <button class="btn" id="resetRooms">Reset</button>
-        <button class="btn" id="copyRooms">Copy JSON</button>
-      </div>
-    </details>
   </div>
   <div class="col sticky">
     <section>
-      <h2>4. What your friend sees</h2>
+      <h2>3. What your friend sees</h2>
       <div class="phone"><canvas id="phone" aria-label="Animation preview, exactly as the GIF will look"></canvas></div>
     </section>
     <section>
@@ -102,6 +97,31 @@
     </section>
   </div>
 </main>
+<dialog id="settings" aria-labelledby="settingsTitle">
+  <form method="dialog" class="dlg-head">
+    <h2 id="settingsTitle">Settings</h2>
+    <button class="icon-btn" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </form>
+  <div class="dlg-body">
+    <section>
+      <h3>Who's who</h3>
+      <div class="row"><span class="label">Me</span><div class="seg" data-who="me"><button data-g="m">Boy</button><button data-g="f">Girl</button></div></div>
+      <div class="row" style="margin-top:6px"><span class="label">Friend</span><div class="seg" data-who="friend"><button data-g="m">Boy</button><button data-g="f">Girl</button></div></div>
+      <label class="row" style="margin-top:10px"><input type="checkbox" id="crowd" checked> Show other students</label>
+      <small class="muted">These save as soon as you tap them.</small>
+    </section>
+    <section>
+      <h3>Rooms</h3>
+      <small class="muted">Group sizes go left to right with spaces between groups, e.g. <b>3 3 3</b>. "Front row" is the row nearest the door, split by the door into a left part and a right part.</small>
+      <div id="roomEditors"></div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn primary" id="saveRooms">Save rooms</button>
+        <button class="btn" id="resetRooms">Reset</button>
+        <button class="btn" id="copyRooms">Copy JSON</button>
+      </div>
+    </section>
+  </div>
+</dialog>
 <script type="module" src="js/app.js"></script>
 </body>
 </html>

@@ -23,7 +23,7 @@ No build step: plain HTML + ES modules, so it can be deployed as a static site (
 - `js/gif.js` – in-browser GIF export: 540×675 portrait, 8 greys, unchanged pixels encoded as transparent, so a GIF is ~1–1.5 MB.
 - Sharing: on a phone (HTTPS or localhost) "Share to WhatsApp" uses the Web Share API; otherwise download and send the file.
 
-Room layouts are edited in the app under "Set up rooms" (saved in your browser; "Copy JSON" to bake them into `DEFAULT_ROOMS`).
+Room layouts and who's who (you = boy, friend = girl by default) live in the gear-icon settings panel. They are saved in your browser, so you set them once; "Copy JSON" lets you bake rooms into `DEFAULT_ROOMS`.
 The URL hash encodes room + seat, so a link reproduces the same animation.
 
 ## Character concepts
