@@ -147,7 +147,7 @@ $("makeGif").onclick = async () => {
 $("share").onclick = async () => {
   if (!gifFile) return;
   try {
-    await navigator.share({ files: [gifFile], text: `I'm here: ${scene.directions}` });
+    await navigator.share({ files: [gifFile], text: `I'm here: ${rooms[state.room].name}` });
   } catch (e) {
     if (e.name !== "AbortError") $("download").click();
   }

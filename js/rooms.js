@@ -125,24 +125,33 @@ export function buildLayout(room) {
     }
   });
 
-  return {
+  const layout = {
     room: R, tables, seats, pitch, tableLen,
     seatById: Object.fromEntries(seats.map((s) => [s.id, s])),
     door: { x: doorX, y: R.y1, w: DOOR_W },
   };
+  for (const s of seats) s.layout = layout;
+  return layout;
 }
 
 const ORD = ["", "1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "9th", "10th", "11th", "12th"];
+const LAST = ["", "last", "second last", "third last", "fourth last", "fifth last", "sixth last"];
 
+// Kept short on purpose: the animation shows the exact seat, the text only has to orient.
 export function describeSeat(seat) {
-  const t = seat.table;
-  const side = t.side === "left" ? "Left side" : "Right side";
-  const row = t.row === "A" ? "front row" : "back row";
-  const table = t.countOnSide === 1 ? "the only table"
-    : t.fromDoor === t.countOnSide ? "last table"
-    : `${ORD[t.fromDoor]} table from the door`;
-  const pos = seat.count === 1 ? "" : seat.index === 0 ? "far seat"
-    : seat.index === seat.count - 1 ? "near seat" : "middle seat";
-  const tableSide = seat.side < 0 ? "its left side" : "its right side";
-  return `${side} · ${row} · ${table} · ${tableSide}${pos ? ", " + pos : ""}`;
+  const t = seat.table, L = seat.layout;
+  if (t.row === "B" && L) {
+    // Back-row tables straight across from the door just get "opposite the door".
+    const mid = L.tables.filter((u) => u.row === "B" && Math.abs(u.x - L.door.x) < L.pitch * 0.75);
+    if (mid.includes(t)) {
+      if (mid.length === 1) return "Right opposite the door";
+      const i = mid.sort((a, b) => a.x - b.x).indexOf(t);
+      return `Opposite the door, ${i === 0 ? "left" : i === mid.length - 1 ? "right" : "middle"} bench`;
+    }
+  }
+  const side = t.side === "left" ? "Left hand side" : "Right hand side";
+  const row = t.row === "A" ? "row by the door" : "row opposite the door";
+  const n = t.countOnSide - t.fromDoor + 1; // counted from the wall end
+  const bench = t.countOnSide === 1 ? "" : `, ${LAST[n] || ORD[n] + " last"} bench`;
+  return `${side}, ${row}${bench}`;
 }

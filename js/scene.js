@@ -272,8 +272,8 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
     if (!captionLines) {
       captionLines = [];
       let line = "";
-      for (const part of directions.split(" · ")) {
-        const next = line ? `${line} · ${part}` : part;
+      for (const part of directions.split(", ")) {
+        const next = line ? `${line}, ${part}` : part;
         if (line && ctx.measureText(next).width > FRAME.w - 28) { captionLines.push(line); line = part; } else line = next;
       }
       captionLines.push(line);
