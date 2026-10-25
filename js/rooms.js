@@ -134,24 +134,30 @@ export function buildLayout(room) {
   return layout;
 }
 
-const ORD = ["", "1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "9th", "10th", "11th", "12th"];
-const LAST = ["", "last", "second last", "third last", "fourth last", "fifth last", "sixth last"];
+const LAST = ["", "last", "second last", "third last"];
+
+// Back-row tables across from the door: the whole group the door faces,
+// or (if the door faces a gap) the tables closest to it.
+function oppositeDoor(L) {
+  const back = L.tables.filter((u) => u.row === "B");
+  const facing = back.filter((u) => {
+    const g = back.filter((v) => v.group === u.group).map((v) => v.x);
+    return Math.min(...g) - L.pitch / 2 <= L.door.x && L.door.x <= Math.max(...g) + L.pitch / 2;
+  });
+  return facing.length ? facing : back.filter((u) => Math.abs(u.x - L.door.x) < L.pitch * 0.75);
+}
 
 // Kept short on purpose: the animation shows the exact seat, the text only has to orient.
 export function describeSeat(seat) {
   const t = seat.table, L = seat.layout;
-  if (t.row === "B" && L) {
-    // Back-row tables straight across from the door just get "opposite the door".
-    const mid = L.tables.filter((u) => u.row === "B" && Math.abs(u.x - L.door.x) < L.pitch * 0.75);
-    if (mid.includes(t)) {
-      if (mid.length === 1) return "Right opposite the door";
-      const i = mid.sort((a, b) => a.x - b.x).indexOf(t);
-      return `Opposite the door, ${i === 0 ? "left" : i === mid.length - 1 ? "right" : "middle"} bench`;
-    }
-  }
+  const mid = t.row === "B" ? oppositeDoor(L) : [];
+  if (mid.includes(t)) return "Opposite the door";
   const side = t.side === "left" ? "Left hand side" : "Right hand side";
   const row = t.row === "A" ? "row by the door" : "row opposite the door";
-  const n = t.countOnSide - t.fromDoor + 1; // counted from the wall end
-  const bench = t.countOnSide === 1 ? "" : `, ${LAST[n] || ORD[n] + " last"} bench`;
+  // Count from the wall end; only last / second last / third last are named.
+  const list = L.tables.filter((u) => u.row === t.row && u.side === t.side && !mid.includes(u))
+    .sort((a, b) => Math.abs(b.x - L.door.x) - Math.abs(a.x - L.door.x));
+  const n = list.indexOf(t) + 1;
+  const bench = list.length > 1 && LAST[n] ? `, ${LAST[n]} bench` : "";
   return `${side}, ${row}${bench}`;
 }
