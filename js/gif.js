@@ -1,5 +1,4 @@
 import { GIFEncoder, applyPalette } from "https://cdn.jsdelivr.net/npm/gifenc@1.0.3/dist/gifenc.esm.js";
-import { FRAME } from "./scene.js";
 
 // Everything is black & white, so a fixed palette of 8 greys is enough for smooth anti-aliased
 // lines. Index 8 marks "unchanged since the previous frame" (transparent), which turns the static
@@ -12,9 +11,9 @@ const PALETTE = [...GREYS, [255, 0, 255], ...Array.from({ length: 7 }, () => [0,
 // because pan frames change every pixel and cost ~6x more bytes than held frames.
 const STEP = 0.05, PAN_STEP = 0.06;
 
-export async function exportGif(scene, { width = FRAME.w, onProgress } = {}) {
-  const scale = width / FRAME.w;
-  const w = Math.round(FRAME.w * scale), h = Math.round(FRAME.h * scale);
+export async function exportGif(scene, { width = scene.frame.w, onProgress } = {}) {
+  const F = scene.frame, scale = width / F.w;
+  const w = Math.round(F.w * scale), h = Math.round(F.h * scale);
   const canvas = document.createElement("canvas");
   canvas.width = w; canvas.height = h;
   const ctx = canvas.getContext("2d", { willReadFrequently: true });

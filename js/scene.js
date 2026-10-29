@@ -1,7 +1,7 @@
 // The "friend walks in and finds me" story. Everything is a pure function of time, so the
 // live preview and the exported GIF are frame-for-frame identical.
 //   renderWorld(ctx, t, ui)  – the whole room in world coordinates (used for the seat-picker map)
-//   renderFrame(ctx, t)      – the portrait phone frame: caption + a camera that follows the friend
+//   renderFrame(ctx, t)      – the phone frame (size: scene.frame) in one of the STYLES below
 import { W, H, buildLayout, describeSeat } from "./rooms.js";
 import { makeGrid, planPath, buildMotion } from "./path.js";
 import * as C from "./character.js";
@@ -15,6 +15,14 @@ const LOOK = 1.3, START_IDLE = 1.35;
 export const FRAME = { w: 540, h: 675, cap: 118 };
 const VIEW = { w: FRAME.w, h: FRAME.h - FRAME.cap };
 const ZOOM_FOLLOW = 1.15, PAN = 0.75;
+const MAP_H_MAX = 380; // height of the room map above the close-up in the "split" style
+
+// GIF styles: a camera that follows the friend, the whole room the whole time, or both stacked.
+export const STYLES = [
+  { id: "follow", name: "Zoom & follow" },
+  { id: "map", name: "Whole room" },
+  { id: "split", name: "Map + close-up" },
+];
 
 const clamp01 = (x) => Math.max(0, Math.min(1, x));
 const smooth = (a, b, x) => { const k = clamp01((x - a) / (b - a)); return k * k * (3 - 2 * k); };
@@ -30,7 +38,7 @@ function rng(seedStr) {
   };
 }
 
-export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35 } = {}) {
+export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35, style = "follow" } = {}) {
   const layout = buildLayout(room);
   const seat = layout.seatById[seatId] || layout.seats[0];
   const { door, room: R } = layout;
@@ -151,10 +159,30 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
     const cy = bounds.y1 - bounds.y0 <= 2 * hh ? (bounds.y0 + bounds.y1) / 2 : Math.max(bounds.y0 + hh, Math.min(bounds.y1 - hh, y));
     return { x: cx, y: cy, z };
   }
-  const overview = (() => {
-    const { x0, x1, y0, y1 } = rot ? { ...box(R.x0 - 14, R.y0 - 14, R.x1 + 14, H - 4), y0: R.x0 - 36 } : box(R.x0 - 14, R.y0 - 30, R.x1 + 14, H - 4);
-    return { x: (x0 + x1) / 2, y: (y0 + y1) / 2, z: Math.min(VIEW.w / (x1 - x0), VIEW.h / (y1 - y0)) };
-  })();
+  // The whole room (with the corridor outside the door), and a camera that fits it into a w×h box.
+  const roomBox = rot ? { ...box(R.x0 - 14, R.y0 - 14, R.x1 + 14, H - 4), y0: R.x0 - 36 } : box(R.x0 - 14, R.y0 - 30, R.x1 + 14, H - 4);
+  const fitRoom = (w, h) => ({
+    x: (roomBox.x0 + roomBox.x1) / 2, y: (roomBox.y0 + roomBox.y1) / 2,
+    z: Math.min(w / (roomBox.x1 - roomBox.x0), h / (roomBox.y1 - roomBox.y0)),
+  });
+  const overview = fitRoom(VIEW.w, VIEW.h);
+
+  // Frame layout for the chosen style: where the room map and the follow camera go.
+  const rbw = roomBox.x1 - roomBox.x0, rbh = roomBox.y1 - roomBox.y0;
+  let frame, mapRect = null, closeRect = null;
+  if (style === "map") {
+    const h = Math.round(Math.min(860, rbh * FRAME.w / rbw));
+    frame = { w: FRAME.w, h: FRAME.cap + h };
+    mapRect = { x: 0, y: FRAME.cap, w: FRAME.w, h };
+  } else if (style === "split") {
+    const h = Math.round(Math.min(MAP_H_MAX, rbh * FRAME.w / rbw));
+    frame = { w: FRAME.w, h: FRAME.cap + h + VIEW.h };
+    mapRect = { x: 0, y: FRAME.cap, w: FRAME.w, h };
+    closeRect = { x: 0, y: FRAME.cap + h, w: VIEW.w, h: VIEW.h };
+  } else {
+    frame = { ...FRAME };
+    closeRect = { x: 0, y: FRAME.cap, w: VIEW.w, h: VIEW.h };
+  }
 
   const shots = [];
   function camAt(t) {
@@ -202,7 +230,7 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
   const outroAt = t2e + 1.9;
   addShot(outroAt, overview, 1.0);
   const duration = outroAt + 1.0 + 1.5;
-  const isMoving = (t) => shots.some((x) => x.dur > 0.05 && t >= x.t && t < x.t + x.dur);
+  const isMoving = (t) => !!closeRect && shots.some((x) => x.dur > 0.05 && t >= x.t && t < x.t + x.dur);
 
   // ---------------------------------------------------------------- drawing
 
@@ -302,20 +330,24 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
     }
   }
 
+  // Labels are drawn labelK times bigger on a zoomed-out map, so they stay readable.
+  let labelK = 1;
   function pill(ctx, x, y, text, dark) {
+    ctx.save(); ctx.translate(x, y + 12); ctx.scale(labelK, labelK); ctx.translate(0, -12);
     ctx.font = `bold 17px ${FONT}`;
     const w = ctx.measureText(text).width + 16;
     ctx.fillStyle = dark ? INK : PAPER; ctx.strokeStyle = INK; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.roundRect(x - w / 2, y - 12, w, 24, 12); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.roundRect(-w / 2, -12, w, 24, 12); ctx.fill(); ctx.stroke();
     ctx.fillStyle = dark ? PAPER : INK; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.fillText(text, x, y + 1);
+    ctx.fillText(text, 0, 1);
+    ctx.restore();
   }
 
   // Speech bubble whose tail points at (x, y). `dx` shifts the body sideways; it is also
   // kept inside the camera bounds.
   function bubble(ctx, x, y, text, k, dx = 0) {
     if (k <= 0) return;
-    const s = easeOutBack(clamp01(k));
+    const s = easeOutBack(clamp01(k)) * labelK;
     ctx.font = `bold 24px ${FONT}`;
     const w = ctx.measureText(text).width + 26, h = 38;
     const bx = Math.max(bounds.x0 + w / 2 + 6, Math.min(bounds.x1 - w / 2 - 6, x + dx)) - x;
@@ -351,11 +383,11 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
   }
 
   // Off-screen pointer to "ME" so the destination is always clear while zoomed in.
-  function drawMePointer(ctx, cam, t) {
+  function drawMePointer(ctx, cam, t, top) {
     if (t > t2e) return;
     const sx = (me0.x - cam.x) * cam.z + VIEW.w / 2;
-    const sy = (me0.y - 40 - cam.y) * cam.z + FRAME.cap + VIEW.h / 2;
-    const m = 30, x0 = m, x1 = VIEW.w - m, y0 = FRAME.cap + m, y1 = FRAME.h - m;
+    const sy = (me0.y - 40 - cam.y) * cam.z + top + VIEW.h / 2;
+    const m = 30, x0 = m, x1 = VIEW.w - m, y0 = top + m, y1 = top + VIEW.h - m;
     if (sx >= x0 && sx <= x1 && sy >= y0 && sy <= y1) return;
     const px = Math.max(x0, Math.min(x1, sx)), py = Math.max(y0, Math.min(y1, sy));
     const ang = Math.atan2(sy - py, sx - px);
@@ -370,15 +402,35 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
     ctx.restore();
   }
 
-  function renderFrame(ctx, t) {
-    const cam = camAt(t);
-    ctx.fillStyle = PAPER; ctx.fillRect(0, 0, FRAME.w, FRAME.h);
+  // The world seen through camera `cam`, drawn into the screen rect `r`.
+  function drawView(ctx, t, r, cam, ui) {
     ctx.save();
-    ctx.beginPath(); ctx.rect(0, FRAME.cap, VIEW.w, VIEW.h); ctx.clip();
-    ctx.translate(VIEW.w / 2, FRAME.cap + VIEW.h / 2); ctx.scale(cam.z, cam.z); ctx.translate(-cam.x, -cam.y);
-    renderWorld(ctx, t);
+    ctx.beginPath(); ctx.rect(r.x, r.y, r.w, r.h); ctx.clip();
+    ctx.translate(r.x + r.w / 2, r.y + r.h / 2); ctx.scale(cam.z, cam.z); ctx.translate(-cam.x, -cam.y);
+    renderWorld(ctx, t, ui);
+    if (ui.closeCam) {
+      // where the close-up below is looking
+      const c = ui.closeCam, w = VIEW.w / c.z, h = VIEW.h / c.z;
+      ctx.strokeStyle = INK; ctx.lineWidth = 2.5 / cam.z; ctx.setLineDash([10 / cam.z, 7 / cam.z]);
+      ctx.strokeRect(c.x - w / 2, c.y - h / 2, w, h); ctx.setLineDash([]);
+    }
     ctx.restore();
-    drawMePointer(ctx, cam, t);
+  }
+
+  function renderFrame(ctx, t) {
+    ctx.fillStyle = PAPER; ctx.fillRect(0, 0, frame.w, frame.h);
+    const cam = closeRect ? camAt(t) : null;
+    if (closeRect) {
+      drawView(ctx, t, closeRect, cam, {});
+      drawMePointer(ctx, cam, t, closeRect.y);
+    }
+    if (mapRect) {
+      const z = fitRoom(mapRect.w, mapRect.h);
+      labelK = Math.min(1.8, 0.9 / z.z);
+      drawView(ctx, t, mapRect, z, { closeCam: cam });
+      labelK = 1;
+      if (closeRect) { ctx.fillStyle = INK; ctx.fillRect(0, closeRect.y - 2, frame.w, 4); }
+    }
     drawCaption(ctx);
   }
 
@@ -451,7 +503,7 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
   // Part of the world the seat-picker map shows (skips the empty strip above the back wall).
   const mapView = rot ? { x0: 0, y0: 0, w: H - R.y0 + 40, h: W } : { x0: 0, y0: 70, w: W, h: H - 70 };
 
-  return { duration, renderWorld, mapView, seatPos: at, renderFrame, isMoving, camAt, shots, layout, seat, directions, timings: { t1s, t1e, t2s, t2e, standStart } };
+  return { duration, frame, style, renderWorld, mapView, seatPos: at, renderFrame, isMoving, camAt, shots, layout, seat, directions, timings: { t1s, t1e, t2s, t2e, standStart } };
 }
 
 export { W, H };

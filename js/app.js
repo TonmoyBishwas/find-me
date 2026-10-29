@@ -1,5 +1,5 @@
 import { W, H, DEFAULT_ROOMS, loadRooms, saveRooms, sanitizeRoom, parseGroups } from "./rooms.js";
-import { createScene, FONT, FRAME } from "./scene.js";
+import { createScene, FONT, FRAME, STYLES } from "./scene.js";
 import { exportGif } from "./gif.js";
 
 const $ = (id) => document.getElementById(id);
@@ -14,8 +14,8 @@ function loadPrefs() {
   try { return JSON.parse(localStorage.getItem(PREFS_KEY)) || {}; } catch { return {}; }
 }
 function savePrefs() {
-  const { room, me, friend, crowd } = state;
-  try { localStorage.setItem(PREFS_KEY, JSON.stringify({ room, me, friend, crowd })); } catch {}
+  const { room, me, friend, crowd, style } = state;
+  try { localStorage.setItem(PREFS_KEY, JSON.stringify({ room, me, friend, crowd, style })); } catch {}
 }
 const prefs = loadPrefs();
 const state = {
@@ -24,6 +24,7 @@ const state = {
   me: prefs.me === "f" ? "f" : "m",
   friend: prefs.friend === "m" ? "m" : "f",
   crowd: prefs.crowd !== false,
+  style: STYLES.some((s) => s.id === prefs.style) ? prefs.style : STYLES[0].id,
 };
 let scene = null, t0 = performance.now(), hoverId = null, gifFile = null, gifUrl = null;
 
@@ -40,7 +41,7 @@ function writeHash() {
 }
 
 function rebuild() {
-  scene = createScene(rooms[state.room], state.seat, { me: state.me, friend: state.friend, crowd: state.crowd ? 0.35 : 0 });
+  scene = createScene(rooms[state.room], state.seat, { me: state.me, friend: state.friend, crowd: state.crowd ? 0.35 : 0, style: state.style });
   if (!state.seat || !scene.layout.seatById[state.seat]) state.seat = null;
   $("directions").textContent = state.seat ? scene.directions : "No seat picked yet";
   $("mapHint").textContent = rooms[state.room].door === "left"
@@ -59,6 +60,12 @@ function renderControls() {
     const b = document.createElement("button");
     b.textContent = r.name; b.setAttribute("aria-pressed", i === state.room);
     b.onclick = () => { state.room = i; state.seat = null; rebuild(); };
+    return b;
+  }));
+  $("styles").replaceChildren(...STYLES.map((s) => {
+    const b = document.createElement("button");
+    b.textContent = s.name; b.setAttribute("aria-pressed", s.id === state.style);
+    b.onclick = () => { state.style = s.id; rebuild(); };
     return b;
   }));
   for (const seg of document.querySelectorAll("[data-who]")) {
@@ -87,7 +94,10 @@ function resize() {
   map.width = v.w * dpr; map.height = v.h * dpr;
   map.style.maxWidth = v.h > v.w ? "560px" : ""; // a door-on-the-left room is tall
   map.style.margin = "0 auto";
-  phone.width = FRAME.w * dpr; phone.height = FRAME.h * dpr;
+  const f = scene?.frame ?? FRAME;
+  phone.width = f.w * dpr; phone.height = f.h * dpr;
+  // keep a tall frame on screen
+  phone.parentElement.style.maxWidth = `${Math.min(340, Math.max(220, (innerHeight * 0.66 - 20) * f.w / f.h))}px`;
 }
 resize();
 window.addEventListener("resize", resize);
@@ -122,9 +132,10 @@ function frame(now) {
     const t = ((now - t0) / 1000) % (scene.duration + 0.6); // short pause, then loop like the GIF
     scene.renderFrame(phoneCtx, Math.min(t, scene.duration));
   } else {
-    phoneCtx.fillStyle = "#fff"; phoneCtx.fillRect(0, 0, FRAME.w, FRAME.h);
+    const f = scene.frame;
+    phoneCtx.fillStyle = "#fff"; phoneCtx.fillRect(0, 0, f.w, f.h);
     phoneCtx.fillStyle = "#777"; phoneCtx.textAlign = "center"; phoneCtx.font = `28px ${FONT}`;
-    phoneCtx.fillText("Tap your seat on the map", FRAME.w / 2, FRAME.h / 2);
+    phoneCtx.fillText("Tap your seat on the map", f.w / 2, f.h / 2);
   }
   requestAnimationFrame(frame);
 }
@@ -143,7 +154,7 @@ $("makeGif").onclick = async () => {
   try {
     const blob = await exportGif(scene, { width: +$("gifSize").value, onProgress: (p) => (bar.value = p) });
     clearGif();
-    const name = `find-me-${rooms[state.room].name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.gif`;
+    const name = `find-me-${rooms[state.room].name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${state.style}.gif`;
     gifFile = new File([blob], name, { type: "image/gif" });
     gifUrl = URL.createObjectURL(blob);
     $("download").href = gifUrl; $("download").download = name;
