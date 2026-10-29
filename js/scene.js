@@ -242,14 +242,15 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
   function frameCam(t) {
     if (follow) return camAt(t);
     if (style !== "zoom") return roomCam;
-    const k = easeInOut(clamp01((t - zoomAt) / ZOOM_GLIDE));
+    // and, like "follow", pull back to the whole room at the end
+    const k = easeInOut(clamp01((t - zoomAt) / ZOOM_GLIDE)) * (1 - easeInOut(clamp01((t - outroAt) / 1.0)));
     return {
       x: roomCam.x + (zoomCam.x - roomCam.x) * k, y: roomCam.y + (zoomCam.y - roomCam.y) * k,
       z: roomCam.z * (zoomCam.z / roomCam.z) ** k,
     };
   }
   const isMoving = (t) => follow ? shots.some((x) => x.dur > 0.05 && t >= x.t && t < x.t + x.dur)
-    : style === "zoom" && t >= zoomAt && t < zoomAt + ZOOM_GLIDE;
+    : style === "zoom" && ((t >= zoomAt && t < zoomAt + ZOOM_GLIDE) || (t >= outroAt && t < outroAt + 1.0));
 
   // ---------------------------------------------------------------- drawing
 
