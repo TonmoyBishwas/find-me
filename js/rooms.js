@@ -17,13 +17,15 @@ const DOOR_W = 64;
 
 // Row A = the row nearest the door, split by the door into a left part and a right part.
 // Row B = the back row. Each part is a list of group sizes (tables per group).
+// Real counts, checked in person. Still editable in Settings.
 export const DEFAULT_ROOMS = [
-  { name: "3rd floor study room", rowA: { left: [3], right: [4] }, rowB: [3, 3, 3], seatsPerSide: 3 },
-  { name: "Study room 2", rowA: { left: [3], right: [4] }, rowB: [3, 3, 3], seatsPerSide: 3 },
-  { name: "Study room 3", rowA: { left: [3], right: [4] }, rowB: [3, 3, 3], seatsPerSide: 3 },
+  { name: "G Floor Study Room", rowA: { left: [5], right: [3] }, rowB: [7], seatsPerSide: 3 },
+  { name: "Second Floor Study Room", rowA: { left: [4], right: [4] }, rowB: [8], seatsPerSide: 3 },
+  { name: "Third Floor Study Room", rowA: { left: [3], right: [4] }, rowB: [9], seatsPerSide: 3 },
 ];
 
-const STORE_KEY = "find-me.rooms.v1";
+// v2: the v1 setups were guesses made before the real rooms were counted.
+const STORE_KEY = "find-me.rooms.v2";
 
 export function loadRooms() {
   try {
@@ -136,15 +138,11 @@ export function buildLayout(room) {
 
 const LAST = ["", "last", "second last", "third last"];
 
-// Back-row tables across from the door: the whole group the door faces,
-// or (if the door faces a gap) the tables closest to it.
+// The three back-row tables closest to straight across from the door.
 function oppositeDoor(L) {
-  const back = L.tables.filter((u) => u.row === "B");
-  const facing = back.filter((u) => {
-    const g = back.filter((v) => v.group === u.group).map((v) => v.x);
-    return Math.min(...g) - L.pitch / 2 <= L.door.x && L.door.x <= Math.max(...g) + L.pitch / 2;
-  });
-  return facing.length ? facing : back.filter((u) => Math.abs(u.x - L.door.x) < L.pitch * 0.75);
+  return L.tables.filter((u) => u.row === "B")
+    .sort((a, b) => Math.abs(a.x - L.door.x) - Math.abs(b.x - L.door.x))
+    .slice(0, 3);
 }
 
 // Kept short on purpose: the animation shows the exact seat, the text only has to orient.
