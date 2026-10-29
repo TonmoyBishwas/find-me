@@ -15,13 +15,14 @@ const LOOK = 1.3, START_IDLE = 1.35;
 export const FRAME = { w: 540, h: 675, cap: 118 };
 const VIEW = { w: FRAME.w, h: FRAME.h - FRAME.cap };
 const ZOOM_FOLLOW = 1.15, PAN = 0.75;
-const MAP_H_MAX = 380; // height of the room map above the close-up in the "split" style
 
-// GIF styles: a camera that follows the friend, the whole room the whole time, or both stacked.
+// GIF styles. All but "follow" show the room in a frame shaped like the room.
 export const STYLES = [
-  { id: "follow", name: "Zoom & follow" },
-  { id: "map", name: "Whole room" },
-  { id: "split", name: "Map + close-up" },
+  { id: "follow", name: "Zoom & follow" },   // the camera follows the friend
+  { id: "map", name: "Whole room" },         // the whole room, the whole time
+  { id: "zoom", name: "Room, then zoom" },   // whole room until halfway, then zoom into my part of it
+  { id: "spotlight", name: "Spotlight" },    // whole room dimmed, a spotlight on the friend and on me
+  { id: "treasure", name: "Treasure map" },  // no friend: the path draws itself to an X at my seat
 ];
 
 const clamp01 = (x) => Math.max(0, Math.min(1, x));
@@ -167,22 +168,20 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
   });
   const overview = fitRoom(VIEW.w, VIEW.h);
 
-  // Frame layout for the chosen style: where the room map and the follow camera go.
+  // Frame layout for the chosen style: "follow" uses the fixed portrait frame, the rest a frame
+  // shaped like the room.
   const rbw = roomBox.x1 - roomBox.x0, rbh = roomBox.y1 - roomBox.y0;
-  let frame, mapRect = null, closeRect = null;
-  if (style === "map") {
+  const follow = !STYLES.some((s) => s.id === style) || style === "follow";
+  let frame, viewRect;
+  if (follow) {
+    frame = { ...FRAME };
+    viewRect = { x: 0, y: FRAME.cap, w: VIEW.w, h: VIEW.h };
+  } else {
     const h = Math.round(Math.min(860, rbh * FRAME.w / rbw));
     frame = { w: FRAME.w, h: FRAME.cap + h };
-    mapRect = { x: 0, y: FRAME.cap, w: FRAME.w, h };
-  } else if (style === "split") {
-    const h = Math.round(Math.min(MAP_H_MAX, rbh * FRAME.w / rbw));
-    frame = { w: FRAME.w, h: FRAME.cap + h + VIEW.h };
-    mapRect = { x: 0, y: FRAME.cap, w: FRAME.w, h };
-    closeRect = { x: 0, y: FRAME.cap + h, w: VIEW.w, h: VIEW.h };
-  } else {
-    frame = { ...FRAME };
-    closeRect = { x: 0, y: FRAME.cap, w: VIEW.w, h: VIEW.h };
+    viewRect = { x: 0, y: FRAME.cap, w: FRAME.w, h };
   }
+  const roomCam = fitRoom(viewRect.w, viewRect.h);
 
   const shots = [];
   function camAt(t) {
@@ -230,7 +229,27 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
   const outroAt = t2e + 1.9;
   addShot(outroAt, overview, 1.0);
   const duration = outroAt + 1.0 + 1.5;
-  const isMoving = (t) => !!closeRect && shots.some((x) => x.dur > 0.05 && t >= x.t && t < x.t + x.dur);
+  // "Room, then zoom": once the friend is halfway along the route, glide in on my part of the room.
+  const ZOOM_GLIDE = 1.1;
+  let zoomAt = t2e;
+  for (let t = t1s; t < t2e; t += 0.05) if (friendState(t).S >= (m1.length + m2.length) / 2) { zoomAt = t; break; }
+  const zoomCam = (() => {
+    const z = Math.min(1.25, roomCam.z * 1.8), hw = viewRect.w / 2 / z, hh = viewRect.h / 2 / z;
+    const g = P(...goal), x = (me0.x + g[0]) / 2, y = (me0.y + g[1]) / 2 - 30;
+    const fit = (v, a, b, half) => (b - a <= 2 * half ? (a + b) / 2 : Math.max(a + half, Math.min(b - half, v)));
+    return { x: fit(x, roomBox.x0, roomBox.x1, hw), y: fit(y, roomBox.y0, roomBox.y1, hh), z };
+  })();
+  function frameCam(t) {
+    if (follow) return camAt(t);
+    if (style !== "zoom") return roomCam;
+    const k = easeInOut(clamp01((t - zoomAt) / ZOOM_GLIDE));
+    return {
+      x: roomCam.x + (zoomCam.x - roomCam.x) * k, y: roomCam.y + (zoomCam.y - roomCam.y) * k,
+      z: roomCam.z * (zoomCam.z / roomCam.z) ** k,
+    };
+  }
+  const isMoving = (t) => follow ? shots.some((x) => x.dur > 0.05 && t >= x.t && t < x.t + x.dur)
+    : style === "zoom" && t >= zoomAt && t < zoomAt + ZOOM_GLIDE;
 
   // ---------------------------------------------------------------- drawing
 
@@ -308,7 +327,7 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
     ctx.restore();
   }
 
-  function drawRoute(ctx, S) {
+  function drawRoute(ctx, S, treasure) {
     // full route as faint dots + direction chevrons, travelled part as a solid line
     ctx.strokeStyle = FLOOR_INK; ctx.lineWidth = 3; ctx.lineCap = "round"; ctx.setLineDash([0.1, 9]);
     ctx.beginPath(); route.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.stroke();
@@ -324,10 +343,48 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
       ctx.stroke();
     }
     const n = Math.min(route.length, Math.floor(S / 2) + 1);
+    if (treasure) {
+      // a big X where the path ends, then the path drawn in thick dashes with an arrowhead
+      const [gx, gy] = route[route.length - 1];
+      ctx.strokeStyle = INK; ctx.lineWidth = 6; ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(gx - 13, gy - 13); ctx.lineTo(gx + 13, gy + 13); ctx.moveTo(gx + 13, gy - 13); ctx.lineTo(gx - 13, gy + 13); ctx.stroke();
+      if (n > 1) {
+        ctx.lineWidth = 5; ctx.setLineDash([14, 10]);
+        ctx.beginPath(); for (let i = 0; i < n; i++) (i ? ctx.lineTo : ctx.moveTo).call(ctx, route[i][0], route[i][1]); ctx.stroke();
+        ctx.setLineDash([]);
+        if (n < route.length) {
+          const [x0, y0] = route[Math.max(0, n - 6)], [x, y] = route[n - 1];
+          const ang = Math.atan2(y - y0, x - x0);
+          ctx.fillStyle = INK; ctx.beginPath();
+          ctx.moveTo(x + Math.cos(ang) * 14, y + Math.sin(ang) * 14);
+          ctx.lineTo(x + Math.cos(ang + 2.4) * 14, y + Math.sin(ang + 2.4) * 14);
+          ctx.lineTo(x + Math.cos(ang - 2.4) * 14, y + Math.sin(ang - 2.4) * 14);
+          ctx.closePath(); ctx.fill();
+        }
+      }
+      return;
+    }
     if (n > 1) {
       ctx.strokeStyle = "#555"; ctx.lineWidth = 3.5;
       ctx.beginPath(); for (let i = 0; i < n; i++) (i ? ctx.lineTo : ctx.moveTo).call(ctx, route[i][0], route[i][1]); ctx.stroke();
     }
+  }
+
+  // Everything outside a circle around the friend (and a smaller one around me) is faded out.
+  function drawSpotlight(ctx, fr, t) {
+    const a = { x: fr.x, y: fr.y - 34, r: 95 }, b = { x: me0.x, y: me0.y - 30, r: 62 + 6 * Math.sin(t * 5) };
+    const d = Math.hypot(a.x - b.x, a.y - b.y);
+    const holes = d < a.r + b.r - 20
+      ? [{ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, r: d / 2 + Math.max(a.r, b.r) }]
+      : [a, b];
+    ctx.save();
+    ctx.fillStyle = "rgba(255,255,255,0.78)";
+    ctx.beginPath(); ctx.rect(roomBox.x0 - 400, roomBox.y0 - 400, rbw + 800, rbh + 800);
+    for (const h of holes) { ctx.moveTo(h.x + h.r, h.y); ctx.arc(h.x, h.y, h.r, 0, Math.PI * 2); }
+    ctx.fill("evenodd");
+    ctx.strokeStyle = INK; ctx.lineWidth = 2.5;
+    for (const h of holes) { ctx.beginPath(); ctx.arc(h.x, h.y, h.r, 0, Math.PI * 2); ctx.stroke(); }
+    ctx.restore();
   }
 
   // Labels are drawn labelK times bigger on a zoomed-out map, so they stay readable.
@@ -402,35 +459,17 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
     ctx.restore();
   }
 
-  // The world seen through camera `cam`, drawn into the screen rect `r`.
-  function drawView(ctx, t, r, cam, ui) {
+  function renderFrame(ctx, t) {
+    ctx.fillStyle = PAPER; ctx.fillRect(0, 0, frame.w, frame.h);
+    const r = viewRect, cam = frameCam(t);
     ctx.save();
     ctx.beginPath(); ctx.rect(r.x, r.y, r.w, r.h); ctx.clip();
     ctx.translate(r.x + r.w / 2, r.y + r.h / 2); ctx.scale(cam.z, cam.z); ctx.translate(-cam.x, -cam.y);
-    renderWorld(ctx, t, ui);
-    if (ui.closeCam) {
-      // where the close-up below is looking
-      const c = ui.closeCam, w = VIEW.w / c.z, h = VIEW.h / c.z;
-      ctx.strokeStyle = INK; ctx.lineWidth = 2.5 / cam.z; ctx.setLineDash([10 / cam.z, 7 / cam.z]);
-      ctx.strokeRect(c.x - w / 2, c.y - h / 2, w, h); ctx.setLineDash([]);
-    }
+    labelK = Math.max(1, Math.min(1.8, 0.9 / cam.z)); // readable labels when zoomed out
+    renderWorld(ctx, t, { spotlight: style === "spotlight", treasure: style === "treasure" });
+    labelK = 1;
     ctx.restore();
-  }
-
-  function renderFrame(ctx, t) {
-    ctx.fillStyle = PAPER; ctx.fillRect(0, 0, frame.w, frame.h);
-    const cam = closeRect ? camAt(t) : null;
-    if (closeRect) {
-      drawView(ctx, t, closeRect, cam, {});
-      drawMePointer(ctx, cam, t, closeRect.y);
-    }
-    if (mapRect) {
-      const z = fitRoom(mapRect.w, mapRect.h);
-      labelK = Math.min(1.8, 0.9 / z.z);
-      drawView(ctx, t, mapRect, z, { closeCam: cam });
-      labelK = 1;
-      if (closeRect) { ctx.fillStyle = INK; ctx.fillRect(0, closeRect.y - 2, frame.w, 4); }
-    }
+    if (follow) drawMePointer(ctx, cam, t, r.y);
     drawCaption(ctx);
   }
 
@@ -439,7 +478,7 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
   function renderWorld(ctx, t, ui = {}) {
     const fr = friendState(t), ms = meState(t);
     drawRoom(ctx);
-    if (!ui.noSeat) drawRoute(ctx, ui.map ? 0 : fr.S);
+    if (!ui.noSeat) drawRoute(ctx, ui.map ? 0 : fr.S, ui.treasure);
     inRoom(ctx, () => drawDoor(ctx, ui.map ? 0 : fr.S));
 
     // target ring under me until the friend arrives
@@ -467,7 +506,7 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
         if (view === "front") drawTable(ctx, seat.table);
       },
     });
-    if (!ui.map) actors.push({ y: fr.y, draw: () => C.drawFigure(ctx, fr.x, fr.y, { size: SIZE, gender: friend, view: fr.view, facing: fr.facing, pose: fr.pose }) });
+    if (!ui.map && !ui.treasure) actors.push({ y: fr.y, draw: () => C.drawFigure(ctx, fr.x, fr.y, { size: SIZE, gender: friend, view: fr.view, facing: fr.facing, pose: fr.pose }) });
     actors.sort((a, b) => a.y - b.y).forEach((a) => a.draw());
 
     // seat picker overlay (live preview only)
@@ -486,6 +525,8 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
       return;
     }
 
+    if (ui.spotlight) drawSpotlight(ctx, fr, t);
+
     // labels and speech
     const meHead = me0.y - (ms.seated ? 0.86 : 1.08) * SIZE;
     const frHead = fr.y - 1.08 * SIZE;
@@ -493,6 +534,11 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
     const frSays = t >= t2e + 0.3;
     const close = Math.hypot(fr.x - me0.x, fr.y - me0.y) < 90;
     const away = Math.abs(fr.x - me0.x) > 4 ? Math.sign(fr.x - me0.x) : -meFacing;
+    if (ui.treasure) {
+      if (meSays) bubble(ctx, me0.x, meHead - 4, "Over here!", (t - standStart - 0.45) / 0.25);
+      else pill(ctx, me0.x, meHead - 14, "ME", true);
+      return;
+    }
     if (fr.thinking) bubble(ctx, fr.x, frHead - 4, "?", ((t - t1e) / LOOK - 0.12) / 0.08);
     else if (!frSays && !close) pill(ctx, fr.x, frHead - 14, "YOU", false);
     if (meSays) bubble(ctx, me0.x, meHead - 4, "Over here!", (t - standStart - 0.45) / 0.25);
