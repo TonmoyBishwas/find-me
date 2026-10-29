@@ -39,9 +39,24 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
   const rot = room.door === "left";
   const P = rot ? (x, y) => [H - y, x] : (x, y) => [x, y];
   const world = rot ? { w: H, h: W } : { w: W, h: H };
-  const at = (s) => { const [x, y] = P(s.x, s.y); return { x, y }; };
+  const at = (s) => {
+    const [x, y] = P(s.x, s.y);
+    // Someone facing us sits behind their table: put them on its centre line so the table hides their legs.
+    return rot && s.side < 0 ? { x, y: P(s.table.x, s.y)[1] } : { x, y };
+  };
   const me0 = at(seat);
-  const faceOf = (s) => (rot ? s.side : -s.side);
+  // Seats sit beside a table, facing it. Turned, the tables lie flat on screen, so people sit above
+  // (seen from the front) or below (seen from behind) and face up or down, towards a side wall.
+  const faceOf = (s) => -s.side;
+  const sitView = (s) => (!rot ? "side" : s.side < 0 ? "front" : "back");
+  const seatedPose = (s, t, seed) => (sitView(s) === "side" ? C.sideSit(t, seed) : C.frontSit(t, seed));
+  function drawSeated(ctx, s, q, fig, chairInk) {
+    const view = sitView(s);
+    if (view !== "back") C.drawChair(ctx, q.x, q.y, faceOf(s), SIZE, chairInk, view);
+    C.drawFigure(ctx, q.x, q.y, { size: SIZE, view, facing: faceOf(s), ...fig });
+    if (view === "back") C.drawChair(ctx, q.x, q.y, faceOf(s), SIZE, chairInk, view);
+    if (view === "front") drawTable(ctx, s.table);
+  }
   const stride = C.STRIDE_UNITS * SIZE / 105;
 
   // Where the friend ends up: middle of the walkway beside my table, a little in front of me
@@ -105,9 +120,14 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
   }
 
   function meState(t) {
-    if (t < standStart) return { view: "side", facing: meFacing, pose: C.sideSit(t, 0.3), seated: true };
+    const sv = sitView(seat);
+    if (t < standStart) return { view: sv, facing: meFacing, pose: seatedPose(seat, t, 0.3), seated: true };
     const k = (t - standStart) / 0.5;
-    if (k < 1) return { view: "side", facing: meFacing, pose: C.lerpPose(C.sideSit(t, 0.3), C.sideStand(), smooth(0, 1, k)), seated: k < 0.5 };
+    if (k < 1) {
+      const pose = sv === "side" ? C.lerpPose(C.sideSit(t, 0.3), C.sideStand(), smooth(0, 1, k))
+        : C.lerpFront(C.frontSit(t, 0.3), C.frontStand(), smooth(0, 1, k));
+      return { view: sv, facing: meFacing, pose, seated: k < 0.5 };
+    }
     const waveEnd = t2e + 1.1;
     if (t < waveEnd) return { view: "front", pose: C.frontWave(t) };
     return { view: "front", pose: C.lerpFront(C.frontWave(t), { ...C.frontStand(), mouth: "open" }, smooth(waveEnd, waveEnd + 0.3, t)) };
@@ -212,13 +232,15 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
       if (tb) label("back row", R.x0 + 20, (tb.y0 + tb.y1) / 2, "center", true);
       if (ta) label("front row", R.x0 + 20, (ta.y0 + ta.y1) / 2, "center", true);
     }
-    // tables: flat top plus a thin front edge (always at the bottom on screen) for a bit of depth
-    for (const t of layout.tables) {
-      const b = box(t.x0, t.y0, t.x1, t.y1);
-      ctx.fillStyle = PAPER; ctx.strokeStyle = INK; ctx.lineWidth = 3; ctx.lineJoin = "round";
-      ctx.beginPath(); ctx.roundRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0, 3); ctx.fill(); ctx.stroke();
-      ctx.fillStyle = INK; ctx.fillRect(b.x0, b.y1 - 1, b.x1 - b.x0, 6);
-    }
+    for (const t of layout.tables) drawTable(ctx, t);
+  }
+
+  // Flat top plus a thin front edge (always at the bottom on screen) for a bit of depth.
+  function drawTable(ctx, t) {
+    const b = box(t.x0, t.y0, t.x1, t.y1);
+    ctx.fillStyle = PAPER; ctx.strokeStyle = INK; ctx.lineWidth = 3; ctx.lineJoin = "round";
+    ctx.beginPath(); ctx.roundRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0, 3); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = INK; ctx.fillRect(b.x0, b.y1 - 1, b.x1 - b.x0, 6);
   }
 
   function drawShell(ctx) {
@@ -367,18 +389,18 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
 
     // characters, back to front
     const actors = people.map((p) => {
-      const q = at(p.seat), f = faceOf(p.seat);
+      const q = at(p.seat);
       return {
-        y: q.y, draw: () => {
-          C.drawChair(ctx, q.x, q.y, f, SIZE, "#cfcfcf");
-          C.drawFigure(ctx, q.x, q.y, { size: SIZE, gender: p.gender, view: "side", facing: f, pose: C.sideSit(t, p.seed), ink: CROWD_INK });
-        },
+        y: q.y, draw: () => drawSeated(ctx, p.seat, q, { gender: p.gender, pose: seatedPose(p.seat, t, p.seed), ink: CROWD_INK }, "#cfcfcf"),
       };
     });
     if (!ui.noSeat) actors.push({
       y: me0.y + 0.1, draw: () => {
-        C.drawChair(ctx, me0.x, me0.y, meFacing, SIZE, ms.seated ? INK : "#bbb");
+        const view = sitView(seat), chairInk = ms.seated ? INK : "#bbb";
+        if (view !== "back" || ms.view !== "back") C.drawChair(ctx, me0.x, me0.y, meFacing, SIZE, chairInk, view);
         C.drawFigure(ctx, me0.x, me0.y, { size: SIZE, gender: me, view: ms.view, facing: ms.facing ?? meFacing, pose: ms.pose });
+        if (view === "back" && ms.view === "back") C.drawChair(ctx, me0.x, me0.y, meFacing, SIZE, chairInk, view);
+        if (view === "front") drawTable(ctx, seat.table);
       },
     });
     if (!ui.map) actors.push({ y: fr.y, draw: () => C.drawFigure(ctx, fr.x, fr.y, { size: SIZE, gender: friend, view: fr.view, facing: fr.facing, pose: fr.pose }) });

@@ -125,8 +125,14 @@ export function frontWave(t, happy = true) {
   };
 }
 
+// Seated, seen from the front (facing the viewer) or from behind. Hands rest forward on the desk.
+export function frontSit(t = 0, seed = 0) {
+  const w = Math.sin(t * 3.1 + seed * 7);
+  return { lift: [0, 0], bob: 0, sway: 0.6 * Math.sin(t * 1.3 + seed), upper: [0.35, 0.3 + 0.06 * w], fore: [-0.5, -0.45 - 0.1 * w], sit: 1, mouth: "smile" };
+}
+
 export function lerpFront(a, b, k) {
-  const out = { bob: lerp(a.bob, b.bob, k), sway: lerp(a.sway, b.sway, k), mouth: k < 0.5 ? a.mouth : b.mouth };
+  const out = { bob: lerp(a.bob, b.bob, k), sway: lerp(a.sway, b.sway, k), sit: lerp(a.sit ?? 0, b.sit ?? 0, k), mouth: k < 0.5 ? a.mouth : b.mouth };
   for (const key of ["lift", "upper", "fore"]) out[key] = [0, 1].map((i) => lerp(a[key][i], b[key][i], k));
   return out;
 }
@@ -256,7 +262,8 @@ function drawSide(ctx, p, gender, f, ink, paper) {
 }
 
 function drawFront(ctx, p, gender, view, ink, paper) {
-  const hipY = -(THIGH + SHIN + FOOT_H) + p.bob;
+  const sit = p.sit ?? 0;
+  const hipY = lerp(-(THIGH + SHIN + FOOT_H) + p.bob, -SEAT_H, sit);
   const sway = p.sway;
   const neck = [sway * 0.6, hipY - TORSO];
   const head = [sway * 0.5, neck[1] - HEAD_R - 3];
@@ -265,7 +272,11 @@ function drawFront(ctx, p, gender, view, ink, paper) {
     const sx = i ? 1 : -1, L = p.lift[i];
     const hip = [sway + sx * 5.5, hipY];
     const ankle = [sway * 0.3 + sx * 6.5, -FOOT_H - L];
-    const knee = [(hip[0] + ankle[0]) / 2 + sx * (1.2 + 0.35 * L), (hip[1] + ankle[1]) / 2 - L * 0.3];
+    // Sitting, the thighs point at (or away from) the viewer, so the knee shows just below the hip.
+    const knee = [
+      (hip[0] + ankle[0]) / 2 + sx * (1.2 + 0.35 * L + 1.5 * sit),
+      lerp((hip[1] + ankle[1]) / 2 - L * 0.3, hipY + 5, sit),
+    ];
     tube(ctx, [hip, knee, ankle], LIMB_W, ink, paper);
     blob(ctx, ankle[0] + sx * 0.8, ankle[1] + 0.6, 5, 3.6, 0, ink, paper);
   }
@@ -306,10 +317,27 @@ export function drawFigure(ctx, x, y, opts) {
   ctx.restore();
 }
 
-/** Side-view chair for seated figures (drawn before the figure). */
-export function drawChair(ctx, x, y, facing, size, ink) {
+/**
+ * Chair for a seated figure. Side and front view: draw before the figure (the backrest is behind
+ * them). Back view: draw after, so the backrest covers their back.
+ */
+export function drawChair(ctx, x, y, facing, size, ink, view = "side") {
   const u = size / 105;
   ctx.save();
+  if (view !== "side") {
+    ctx.translate(x, y); ctx.scale(u, u);
+    ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.strokeStyle = ink; ctx.lineWidth = 2.6;
+    ctx.beginPath();
+    ctx.moveTo(-13, -SEAT_H + 5); ctx.lineTo(13, -SEAT_H + 5);
+    ctx.moveTo(-11, -SEAT_H + 5); ctx.lineTo(-11, 0);
+    ctx.moveTo(11, -SEAT_H + 5); ctx.lineTo(11, 0);
+    ctx.stroke();
+    ctx.beginPath(); ctx.roundRect(-14, -SEAT_H - 26, 28, 24, 3);
+    if (view === "back") { ctx.fillStyle = "#fff"; ctx.fill(); }
+    ctx.stroke();
+    ctx.restore();
+    return;
+  }
   ctx.translate(x, y); ctx.scale(u * facing, u);
   ctx.lineCap = "round"; ctx.strokeStyle = ink; ctx.lineWidth = 2.6;
   ctx.beginPath();
