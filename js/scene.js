@@ -99,12 +99,13 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
   const route = m1.pts.concat(m2.pts);
   const meFacing = faceOf(seat);
   const lookFirst = rot ? 1 : seat.x > door.x ? -1 : 1;
-  // Turned, the friend stops in the walkway behind my chair, above or below me on screen, so we
-  // meet face to face up/down the screen: whoever is higher is seen from the front.
+  // When the friend stops above or below me on screen she faces me up/down the screen: from the
+  // front if she's higher, from behind if lower. Turned, I sit facing away from the walkway, so I
+  // turn round to face her too; otherwise I face the camera and wave.
   const fEnd = m2.at(m2.duration);
-  const upDown = rot && Math.abs(fEnd.y - me0.y) > Math.abs(fEnd.x - me0.x);
+  const upDown = Math.abs(fEnd.y - me0.y) > Math.abs(fEnd.x - me0.x);
   const friendEndView = !upDown ? "side" : fEnd.y < me0.y ? "front" : "back";
-  const meEndView = friendEndView === "front" ? "back" : "front";
+  const meEndView = rot && friendEndView === "front" ? "back" : "front";
   const directions = describeSeat(seat);
 
   function friendState(t) {
