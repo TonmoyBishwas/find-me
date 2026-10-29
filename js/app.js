@@ -74,6 +74,11 @@ for (const seg of document.querySelectorAll("[data-who]")) {
 }
 $("crowd").addEventListener("change", (e) => { state.crowd = e.target.checked; rebuild(); });
 $("replay").onclick = () => { t0 = performance.now(); };
+$("themeToggle").onclick = () => {
+  const dark = document.documentElement.dataset.theme !== "dark";
+  if (dark) document.documentElement.dataset.theme = "dark"; else delete document.documentElement.dataset.theme;
+  try { localStorage.setItem("find-me.theme", dark ? "dark" : "light"); } catch {}
+};
 
 // ---- canvases ----
 function resize() {
