@@ -74,13 +74,15 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
   }
   const stride = C.STRIDE_UNITS * SIZE / 105;
 
-  // Where the friend ends up: middle of the walkway beside my table, a little in front of me
-  // so the two figures don't overlap.
+  // Where the friend ends up: middle of the walkway beside my table, a step along from me so the
+  // two figures don't overlap. Seen from the side that step is up/down the screen, and the walkway
+  // can be too narrow to keep us apart sideways, so it's a full body height; turned, it's sideways.
   const tbl = seat.table;
   const beside = layout.tables.filter((o) => o.row === tbl.row && (seat.side < 0 ? o.x < tbl.x : o.x > tbl.x));
   const edge = seat.side < 0 ? Math.max(R.x0, ...beside.map((o) => o.x1)) : Math.min(R.x1, ...beside.map((o) => o.x0));
-  // The front row stands against the door wall, so never aim past the wall.
-  const goal = [(edge + (seat.side < 0 ? tbl.x0 : tbl.x1)) / 2, Math.min(seat.y + 42, R.y1 - 22)];
+  const step = rot ? 42 : SIZE + 8;
+  // The front row stands against the door wall: if there's no room past me, stop just before me.
+  const goal = [(edge + (seat.side < 0 ? tbl.x0 : tbl.x1)) / 2, seat.y + step <= R.y1 - 22 ? seat.y + step : seat.y - step];
 
   const rand = rng(`${room.name}|${seat.id}`);
   const people = layout.seats
@@ -584,7 +586,7 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
   // Part of the world the seat-picker map shows (skips the empty strip above the back wall).
   const mapView = rot ? { x0: 0, y0: 0, w: H - R.y0 + 40, h: W } : { x0: 0, y0: 70, w: W, h: H - 70 };
 
-  return { duration, frame, style, renderWorld, mapView, seatPos: at, renderFrame, isMoving, camAt, shots, layout, seat, directions, timings: { t1s, t1e, t2s, t2e, standStart } };
+  return { duration, frame, style, renderWorld, mapView, seatPos: at, renderFrame, isMoving, camAt, shots, layout, seat, directions, meet: { friend: fEnd, me: me0 }, timings: { t1s, t1e, t2s, t2e, standStart } };
 }
 
 export { W, H };
