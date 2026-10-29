@@ -83,13 +83,14 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
   const step = rot ? 42 : SIZE + 8;
   // The front row stands against the door wall: if there's no room past me, stop just before me.
   const gy = seat.y + step <= R.y1 - 22 ? seat.y + step : seat.y - step;
-  // Turned, a walkway is shorter on screen than a standing figure, so anyone standing in one
-  // reaches over the next table. Instead the friend walks along the walkway above my table (never
-  // out into the wide gap by the door) and steps in behind it, so the table hides her legs: beside
-  // me if I sit above it, across the table from me if I sit below it.
-  const aboveEdge = Math.max(R.x0, ...layout.tables.filter((o) => o.row === tbl.row && o.x < tbl.x).map((o) => o.x1));
-  const goal = rot ? [tbl.x0 - Math.min(28, (tbl.x0 - aboveEdge) / 2), gy] : [(edge + (seat.side < 0 ? tbl.x0 : tbl.x1)) / 2, gy];
-  const standAt = rot ? [tbl.x, gy] : goal;
+  // She always comes down the walkway on my side of the table. Turned, a walkway is shorter on
+  // screen than a standing figure, so anyone standing in the middle of one reaches over the next
+  // table. Instead she walks along it (never out into the wide gap by the door) and then steps in
+  // level with me: behind the table beside me if I sit above it (it hides her legs, as it does
+  // mine), or in front of it beside me if I sit below it.
+  const near = seat.side < 0 ? tbl.x0 : tbl.x1;
+  const goal = [near + seat.side * (rot ? Math.min(28, Math.abs(edge - near) / 2) : Math.abs(edge - near) / 2), gy];
+  const standAt = !rot ? goal : [seat.side < 0 ? tbl.x : seat.x, gy];
 
   const rand = rng(`${room.name}|${seat.id}`);
   const people = layout.seats
