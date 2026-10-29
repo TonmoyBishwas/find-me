@@ -93,6 +93,12 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
   const route = m1.pts.concat(m2.pts);
   const meFacing = faceOf(seat);
   const lookFirst = rot ? 1 : seat.x > door.x ? -1 : 1;
+  // Turned, the friend stops in the walkway behind my chair, above or below me on screen, so we
+  // meet face to face up/down the screen: whoever is higher is seen from the front.
+  const fEnd = m2.at(m2.duration);
+  const upDown = rot && Math.abs(fEnd.y - me0.y) > Math.abs(fEnd.x - me0.x);
+  const friendEndView = !upDown ? "side" : fEnd.y < me0.y ? "front" : "back";
+  const meEndView = friendEndView === "front" ? "back" : "front";
   const directions = describeSeat(seat);
 
   function friendState(t) {
@@ -118,9 +124,11 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
     const m = m2.at(m2.duration);
     const k = t - t2e;
     const facing = me0.x >= m.x ? 1 : -1;
-    const pose = k > 0.15 && k < 1.5 ? C.lerpPose(C.sideStand(), C.sideWave(t), smooth(0.15, 0.35, k) * (1 - smooth(1.3, 1.5, k)))
-      : { ...C.sideStand(), mouth: "open" };
-    return { ...m, S: m1.length + m2.length, view: "side", facing, pose, arrived: true };
+    const wave = smooth(0.15, 0.35, k) * (1 - smooth(1.3, 1.5, k));
+    const pose = friendEndView === "side"
+      ? (k > 0.15 && k < 1.5 ? C.lerpPose(C.sideStand(), C.sideWave(t), wave) : { ...C.sideStand(), mouth: "open" })
+      : C.lerpFront({ ...C.frontStand(), mouth: "open" }, C.frontWave(t), wave);
+    return { ...m, S: m1.length + m2.length, view: friendEndView, facing, pose, arrived: true };
   }
 
   function stand(m) { return m.view === "side" ? C.sideStand() : C.frontStand(); }
@@ -141,8 +149,8 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
       return { view: sv, facing: meFacing, pose, seated: k < 0.5 };
     }
     const waveEnd = t2e + 1.1;
-    if (t < waveEnd) return { view: "front", pose: C.frontWave(t) };
-    return { view: "front", pose: C.lerpFront(C.frontWave(t), { ...C.frontStand(), mouth: "open" }, smooth(waveEnd, waveEnd + 0.3, t)) };
+    if (t < waveEnd) return { view: meEndView, pose: C.frontWave(t) };
+    return { view: meEndView, pose: C.lerpFront(C.frontWave(t), { ...C.frontStand(), mouth: "open" }, smooth(waveEnd, waveEnd + 0.3, t)) };
   }
 
   // ---------------------------------------------------------------- camera
