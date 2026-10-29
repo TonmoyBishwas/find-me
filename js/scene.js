@@ -260,19 +260,20 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
   }
 
   // A plan-view door: frame posts, a swing arc, and a door leaf with a handle. It rests ajar and
-  // swings wide open while the friend walks through.
+  // swings wide open while the friend walks through. An outward door swings into the corridor.
   function drawDoor(ctx, S) {
     const open = smooth(108 - 90, 108 - 35, S) * (1 - smooth(m1.length + 40, m1.length + 130, S));
     const a = (0.22 + 0.74 * open) * Math.PI / 2;
     const hx = door.x - door.w / 2, hy = R.y1, L = door.w - 4;
-    ctx.strokeStyle = FLOOR_INK; ctx.lineWidth = 1.5; ctx.setLineDash([4, 5]);
-    ctx.beginPath(); ctx.arc(hx, hy, L, -Math.PI / 2, 0); ctx.stroke(); ctx.setLineDash([]);
     // frame posts on both sides of the opening
     ctx.fillStyle = INK;
     ctx.fillRect(hx - 4, hy - 8, 8, 16);
     ctx.fillRect(door.x + door.w / 2 - 4, hy - 8, 8, 16);
-    // the leaf
-    ctx.save(); ctx.translate(hx, hy); ctx.rotate(-a);
+    // swing arc and leaf, mirrored across the wall for an outward door
+    ctx.save(); ctx.translate(hx, hy); if (room.doorSwing === "out") ctx.scale(1, -1);
+    ctx.strokeStyle = FLOOR_INK; ctx.lineWidth = 1.5; ctx.setLineDash([4, 5]);
+    ctx.beginPath(); ctx.arc(0, 0, L, -Math.PI / 2, 0); ctx.stroke(); ctx.setLineDash([]);
+    ctx.rotate(-a);
     ctx.fillStyle = PAPER; ctx.strokeStyle = INK; ctx.lineWidth = 2.5; ctx.lineJoin = "round";
     ctx.beginPath(); ctx.roundRect(2, -3.5, L - 2, 7, 2); ctx.fill(); ctx.stroke();
     ctx.fillStyle = INK; ctx.beginPath(); ctx.arc(L - 8, -7, 2.6, 0, Math.PI * 2); ctx.fill();

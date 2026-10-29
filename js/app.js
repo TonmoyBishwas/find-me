@@ -186,20 +186,22 @@ function renderEditors() {
       <span>Front row, right of door</span><input type="text" data-k="aRight">
       <span>Back row</span><input type="text" data-k="b">
       <span>Seats per table side</span><select data-k="seats"><option>1</option><option>2</option><option>3</option><option>4</option></select>
-      <span>Door on the map</span><select data-k="door"><option value="bottom">Bottom</option><option value="left">Left</option></select>`;
+      <span>Door on the map</span><select data-k="door"><option value="bottom">Bottom</option><option value="left">Left</option></select>
+      <span>Door opens</span><select data-k="doorSwing"><option value="in">Inward</option><option value="out">Outward</option></select>`;
     d.querySelector('[data-k="name"]').value = r.name;
     d.querySelector('[data-k="aLeft"]').value = r.rowA.left.join(" ");
     d.querySelector('[data-k="aRight"]').value = r.rowA.right.join(" ");
     d.querySelector('[data-k="b"]').value = r.rowB.join(" ");
     d.querySelector('[data-k="seats"]').value = r.seatsPerSide;
     d.querySelector('[data-k="door"]').value = r.door;
+    d.querySelector('[data-k="doorSwing"]').value = r.doorSwing;
     return d;
   }));
 }
 $("saveRooms").onclick = () => {
   rooms = [...document.querySelectorAll(".room-edit")].map((d) => {
     const v = (k) => d.querySelector(`[data-k="${k}"]`).value;
-    return sanitizeRoom({ name: v("name"), rowA: { left: parseGroups(v("aLeft")), right: parseGroups(v("aRight")) }, rowB: parseGroups(v("b")), seatsPerSide: +v("seats"), door: v("door") });
+    return sanitizeRoom({ name: v("name"), rowA: { left: parseGroups(v("aLeft")), right: parseGroups(v("aRight")) }, rowB: parseGroups(v("b")), seatsPerSide: +v("seats"), door: v("door"), doorSwing: v("doorSwing") });
   });
   saveRooms(rooms); rebuild(); renderEditors();
   flash($("saveRooms"), "Saved ✓");
