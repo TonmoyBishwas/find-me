@@ -5,7 +5,6 @@ import { exportGif } from "./gif.js";
 const $ = (id) => document.getElementById(id);
 const map = $("map"), mapCtx = map.getContext("2d");
 const phone = $("phone"), phoneCtx = phone.getContext("2d");
-const MAP_TOP = 70; // the map crops off the empty strip above the back wall
 
 let rooms = loadRooms();
 
@@ -44,6 +43,10 @@ function rebuild() {
   scene = createScene(rooms[state.room], state.seat, { me: state.me, friend: state.friend, crowd: state.crowd ? 0.35 : 0 });
   if (!state.seat || !scene.layout.seatById[state.seat]) state.seat = null;
   $("directions").textContent = state.seat ? scene.directions : "No seat picked yet";
+  $("mapHint").textContent = rooms[state.room].door === "left"
+    ? "The door is on the left, so the map's top is your left as you walk in."
+    : "The door is at the bottom, so the map's left is your left as you walk in.";
+  resize();
   t0 = performance.now();
   clearGif();
   writeHash();
@@ -75,7 +78,10 @@ $("replay").onclick = () => { t0 = performance.now(); };
 // ---- canvases ----
 function resize() {
   const dpr = Math.min(2, window.devicePixelRatio || 1);
-  map.width = W * dpr; map.height = (H - MAP_TOP) * dpr;
+  const v = scene?.mapView ?? { w: W, h: H };
+  map.width = v.w * dpr; map.height = v.h * dpr;
+  map.style.maxWidth = v.h > v.w ? "560px" : ""; // a door-on-the-left room is tall
+  map.style.margin = "0 auto";
   phone.width = FRAME.w * dpr; phone.height = FRAME.h * dpr;
 }
 resize();
@@ -83,12 +89,13 @@ window.addEventListener("resize", resize);
 
 function toWorld(e) {
   const r = map.getBoundingClientRect();
-  return [(e.clientX - r.left) * W / r.width, (e.clientY - r.top) * (H - MAP_TOP) / r.height + MAP_TOP];
+  const v = scene.mapView;
+  return [(e.clientX - r.left) * v.w / r.width + v.x0, (e.clientY - r.top) * v.h / r.height + v.y0];
 }
 function seatAt([x, y]) {
   let best = null, bd = 30;
   for (const s of scene.layout.seats) {
-    const d = Math.hypot(s.x - x, s.y - 18 - y);
+    const q = scene.seatPos(s), d = Math.hypot(q.x - x, q.y - 18 - y);
     if (d < bd) { bd = d; best = s; }
   }
   return best;
@@ -101,8 +108,8 @@ map.addEventListener("click", (e) => {
 });
 
 function frame(now) {
-  const dpr = map.width / W;
-  mapCtx.setTransform(dpr, 0, 0, dpr, 0, -MAP_TOP * dpr);
+  const v = scene.mapView, dpr = map.width / v.w;
+  mapCtx.setTransform(dpr, 0, 0, dpr, -v.x0 * dpr, -v.y0 * dpr);
   scene.renderWorld(mapCtx, 0, { map: true, showSeats: true, hoverId, noSeat: !state.seat });
 
   phoneCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -173,19 +180,21 @@ function renderEditors() {
       <span>Front row, left of door</span><input type="text" data-k="aLeft">
       <span>Front row, right of door</span><input type="text" data-k="aRight">
       <span>Back row</span><input type="text" data-k="b">
-      <span>Seats per table side</span><select data-k="seats"><option>1</option><option>2</option><option>3</option><option>4</option></select>`;
+      <span>Seats per table side</span><select data-k="seats"><option>1</option><option>2</option><option>3</option><option>4</option></select>
+      <span>Door on the map</span><select data-k="door"><option value="bottom">Bottom</option><option value="left">Left</option></select>`;
     d.querySelector('[data-k="name"]').value = r.name;
     d.querySelector('[data-k="aLeft"]').value = r.rowA.left.join(" ");
     d.querySelector('[data-k="aRight"]').value = r.rowA.right.join(" ");
     d.querySelector('[data-k="b"]').value = r.rowB.join(" ");
     d.querySelector('[data-k="seats"]').value = r.seatsPerSide;
+    d.querySelector('[data-k="door"]').value = r.door;
     return d;
   }));
 }
 $("saveRooms").onclick = () => {
   rooms = [...document.querySelectorAll(".room-edit")].map((d) => {
     const v = (k) => d.querySelector(`[data-k="${k}"]`).value;
-    return sanitizeRoom({ name: v("name"), rowA: { left: parseGroups(v("aLeft")), right: parseGroups(v("aRight")) }, rowB: parseGroups(v("b")), seatsPerSide: +v("seats") });
+    return sanitizeRoom({ name: v("name"), rowA: { left: parseGroups(v("aLeft")), right: parseGroups(v("aRight")) }, rowB: parseGroups(v("b")), seatsPerSide: +v("seats"), door: v("door") });
   });
   saveRooms(rooms); rebuild(); renderEditors();
   flash($("saveRooms"), "Saved ✓");

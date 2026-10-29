@@ -34,6 +34,14 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
   const layout = buildLayout(room);
   const seat = layout.seatById[seatId] || layout.seats[0];
   const { door, room: R } = layout;
+  // Layout and route planning live in room coordinates (door at the bottom). A room whose door
+  // is on the left is turned a quarter clockwise only when drawn; figures stay upright.
+  const rot = room.door === "left";
+  const P = rot ? (x, y) => [H - y, x] : (x, y) => [x, y];
+  const world = rot ? { w: H, h: W } : { w: W, h: H };
+  const at = (s) => { const [x, y] = P(s.x, s.y); return { x, y }; };
+  const me0 = at(seat);
+  const faceOf = (s) => (rot ? s.side : -s.side);
   const stride = C.STRIDE_UNITS * SIZE / 105;
 
   // Where the friend ends up: middle of the walkway beside my table, a little in front of me
@@ -50,18 +58,18 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
 
   const grid = makeGrid(layout, people.map((p) => p.seat));
   const start = [door.x, door.y + 108], inside = [door.x, door.y - 52];
-  const m1 = buildMotion([start, inside]);
-  const m2 = buildMotion(planPath(grid, inside, goal));
+  const m1 = buildMotion([P(...start), P(...inside)]);
+  const m2 = buildMotion(planPath(grid, inside, goal).map((q) => P(...q)));
 
   const t1s = START_IDLE, t1e = t1s + m1.duration, t2s = t1e + LOOK, t2e = t2s + m2.duration;
   const standStart = Math.max(t2s + 0.4, t2e - 1.7);
   const route = m1.pts.concat(m2.pts);
-  const meFacing = -seat.side;
-  const lookFirst = seat.x > door.x ? -1 : 1;
+  const meFacing = faceOf(seat);
+  const lookFirst = rot ? 1 : seat.x > door.x ? -1 : 1;
   const directions = describeSeat(seat);
 
   function friendState(t) {
-    if (t < t1s) return { ...m1.at(0), S: 0, view: "back", pose: C.frontStand() };
+    if (t < t1s) return { ...m1.at(0), S: 0, pose: stand(m1.at(0)) };
     if (t < t1e) {
       const m = m1.at(t - t1s);
       return { ...m, S: m.s, pose: walkPose(m) };
@@ -70,7 +78,7 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
     if (t < t2s) {
       const k = (t - t1e) / LOOK;
       const S = m1.length;
-      if (k < 0.1 || k > 0.9) return { ...end1, S, view: "back", pose: C.frontStand() };
+      if (k < 0.1 || k > 0.9) return { ...end1, S, pose: stand(end1) };
       const half = k < 0.5 ? 0 : 1;
       const local = (k - (half ? 0.5 : 0.1)) / (half ? 0.4 : 0.4);
       const pose = C.lerpPose(C.sideStand(), C.sideSearch(t), smooth(0, 0.3, local) * (1 - smooth(0.8, 1, local)));
@@ -82,11 +90,13 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
     }
     const m = m2.at(m2.duration);
     const k = t - t2e;
-    const facing = seat.x >= m.x ? 1 : -1;
+    const facing = me0.x >= m.x ? 1 : -1;
     const pose = k > 0.15 && k < 1.5 ? C.lerpPose(C.sideStand(), C.sideWave(t), smooth(0.15, 0.35, k) * (1 - smooth(1.3, 1.5, k)))
       : { ...C.sideStand(), mouth: "open" };
     return { ...m, S: m1.length + m2.length, view: "side", facing, pose, arrived: true };
   }
+
+  function stand(m) { return m.view === "side" ? C.sideStand() : C.frontStand(); }
 
   function walkPose(m) {
     const phi = (m.s / stride) * Math.PI * 2;
@@ -108,7 +118,12 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
   // glides to a new framing only when they near the edge. Held frames barely change, which keeps
   // the GIF small, and it reads like a filmed scene rather than a jittery tracking cam.
 
-  const bounds = { x0: R.x0 - 24, x1: R.x1 + 24, y0: R.y0 - 40, y1: H };
+  const box = (x0, y0, x1, y1) => {
+    const [ax, ay] = P(x0, y0), [bx, by] = P(x1, y1);
+    return { x0: Math.min(ax, bx), x1: Math.max(ax, bx), y0: Math.min(ay, by), y1: Math.max(ay, by) };
+  };
+  // Rotated, heads poke above the left-side tables, so keep a strip of headroom there too.
+  const bounds = rot ? { ...box(R.x0 - 24, R.y0 - 40, R.x1 + 24, H), y0: R.x0 - 40 } : box(R.x0 - 24, R.y0 - 40, R.x1 + 24, H);
   function clampCam(x, y, z) {
     const hw = VIEW.w / 2 / z, hh = VIEW.h / 2 / z;
     const cx = bounds.x1 - bounds.x0 <= 2 * hw ? (bounds.x0 + bounds.x1) / 2 : Math.max(bounds.x0 + hw, Math.min(bounds.x1 - hw, x));
@@ -116,7 +131,7 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
     return { x: cx, y: cy, z };
   }
   const overview = (() => {
-    const x0 = R.x0 - 14, x1 = R.x1 + 14, y0 = R.y0 - 30, y1 = H - 4;
+    const { x0, x1, y0, y1 } = rot ? { ...box(R.x0 - 14, R.y0 - 14, R.x1 + 14, H - 4), y0: R.x0 - 36 } : box(R.x0 - 14, R.y0 - 30, R.x1 + 14, H - 4);
     return { x: (x0 + x1) / 2, y: (y0 + y1) / 2, z: Math.min(VIEW.w / (x1 - x0), VIEW.h / (y1 - y0)) };
   })();
 
@@ -141,7 +156,7 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
 
   // Establishing shot of the whole room, then a cut to the door.
   addShot(0, overview, 0.01);
-  addShot(1.2, { x: door.x, y: door.y - 30, z: ZOOM_FOLLOW }, 0.01);
+  { const [x, y] = P(door.x, door.y - (rot ? 0 : 30)); addShot(1.2, { x, y: y - (rot ? 30 : 0), z: ZOOM_FOLLOW }, 0.01); }
   const hw = VIEW.w / 2 / ZOOM_FOLLOW, hh = VIEW.h / 2 / ZOOM_FOLLOW;
   const panTo = (t, x, y) => {
     const last = shots[shots.length - 1], c = clampCam(x, y, ZOOM_FOLLOW);
@@ -159,7 +174,8 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
   }
   {
     const last = shots[shots.length - 1];
-    panTo(Math.max(meetAt, last.t + last.dur), (seat.x + goal[0]) / 2, (seat.y + goal[1]) / 2 - 40);
+    const g = P(...goal);
+    panTo(Math.max(meetAt, last.t + last.dur), (me0.x + g[0]) / 2, (me0.y + g[1]) / 2 - 40);
   }
   // Pull back to the whole room so the full route is the last thing they see.
   const outroAt = t2e + 1.9;
@@ -169,8 +185,43 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
 
   // ---------------------------------------------------------------- drawing
 
+  // Draws in room coordinates, turned with the room.
+  const inRoom = (ctx, fn) => { ctx.save(); if (rot) ctx.transform(0, 1, -1, 0, H, 0); fn(); ctx.restore(); };
+
   function drawRoom(ctx) {
-    ctx.fillStyle = PAPER; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = PAPER; ctx.fillRect(0, 0, world.w, world.h);
+    inRoom(ctx, () => drawShell(ctx));
+    // labels stay upright
+    ctx.fillStyle = "#9b9b9b"; ctx.font = `20px ${FONT}`; ctx.textBaseline = "middle";
+    const label = (txt, x, y, align, vertical) => {
+      const [px, py] = P(x, y);
+      ctx.save(); ctx.translate(px, py); if (vertical) ctx.rotate(-Math.PI / 2);
+      ctx.textAlign = align; ctx.fillText(txt, 0, 0); ctx.restore();
+    };
+    const tb = layout.tables.find((t) => t.row === "B"), ta = layout.tables.find((t) => t.row === "A");
+    if (rot) {
+      label("↑ left side", R.x0 + 18, R.y1 - 22, "left");
+      label("↓ right side", R.x1 - 18, R.y1 - 22, "left");
+      label("DOOR", door.x + door.w / 2 + 26, R.y1 + 30, "center");
+      if (tb) label("back row", R.x1 - 18, (tb.y0 + tb.y1) / 2, "center");
+      if (ta) label("front row", R.x1 - 18, (ta.y0 + ta.y1) / 2, "center");
+    } else {
+      label("← left side", R.x0 + 18, R.y1 - 22, "left");
+      label("right side →", R.x1 - 18, R.y1 - 22, "right");
+      label("DOOR", door.x + door.w / 2 + 10, R.y1 + 24, "left");
+      if (tb) label("back row", R.x0 + 20, (tb.y0 + tb.y1) / 2, "center", true);
+      if (ta) label("front row", R.x0 + 20, (ta.y0 + ta.y1) / 2, "center", true);
+    }
+    // tables: flat top plus a thin front edge (always at the bottom on screen) for a bit of depth
+    for (const t of layout.tables) {
+      const b = box(t.x0, t.y0, t.x1, t.y1);
+      ctx.fillStyle = PAPER; ctx.strokeStyle = INK; ctx.lineWidth = 3; ctx.lineJoin = "round";
+      ctx.beginPath(); ctx.roundRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0, 3); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = INK; ctx.fillRect(b.x0, b.y1 - 1, b.x1 - b.x0, 6);
+    }
+  }
+
+  function drawShell(ctx) {
     // corridor outside the door
     ctx.strokeStyle = "#e3e3e3"; ctx.lineWidth = 1.5; ctx.setLineDash([10, 8]);
     ctx.beginPath(); ctx.moveTo(R.x0, H - 10); ctx.lineTo(R.x1, H - 10); ctx.stroke();
@@ -181,24 +232,6 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
     ctx.moveTo(door.x - door.w / 2, R.y1); ctx.lineTo(R.x0, R.y1); ctx.lineTo(R.x0, R.y0);
     ctx.lineTo(R.x1, R.y0); ctx.lineTo(R.x1, R.y1); ctx.lineTo(door.x + door.w / 2, R.y1);
     ctx.stroke();
-    // floor labels
-    ctx.fillStyle = "#9b9b9b"; ctx.font = `20px ${FONT}`; ctx.textAlign = "left"; ctx.textBaseline = "middle";
-    ctx.fillText("← left side", R.x0 + 18, R.y1 - 22);
-    ctx.textAlign = "right"; ctx.fillText("right side →", R.x1 - 18, R.y1 - 22);
-    ctx.textAlign = "left"; ctx.fillText("DOOR", door.x + door.w / 2 + 10, R.y1 + 24);
-    const rowLabel = (txt, y) => {
-      ctx.save(); ctx.translate(R.x0 + 20, y); ctx.rotate(-Math.PI / 2);
-      ctx.textAlign = "center"; ctx.fillText(txt, 0, 0); ctx.restore();
-    };
-    const tb = layout.tables.find((t) => t.row === "B"), ta = layout.tables.find((t) => t.row === "A");
-    if (tb) rowLabel("back row", (tb.y0 + tb.y1) / 2);
-    if (ta) rowLabel("front row", (ta.y0 + ta.y1) / 2);
-    // tables: flat top plus a thin front edge for a bit of depth
-    for (const t of layout.tables) {
-      ctx.fillStyle = PAPER; ctx.strokeStyle = INK; ctx.lineWidth = 3; ctx.lineJoin = "round";
-      ctx.beginPath(); ctx.roundRect(t.x0, t.y0, t.x1 - t.x0, t.y1 - t.y0, 3); ctx.fill(); ctx.stroke();
-      ctx.fillStyle = INK; ctx.fillRect(t.x0, t.y1 - 1, t.x1 - t.x0, 6);
-    }
   }
 
   function drawDoor(ctx, S) {
@@ -286,8 +319,8 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
   // Off-screen pointer to "ME" so the destination is always clear while zoomed in.
   function drawMePointer(ctx, cam, t) {
     if (t > t2e) return;
-    const sx = (seat.x - cam.x) * cam.z + VIEW.w / 2;
-    const sy = (seat.y - 40 - cam.y) * cam.z + FRAME.cap + VIEW.h / 2;
+    const sx = (me0.x - cam.x) * cam.z + VIEW.w / 2;
+    const sy = (me0.y - 40 - cam.y) * cam.z + FRAME.cap + VIEW.h / 2;
     const m = 30, x0 = m, x1 = VIEW.w - m, y0 = FRAME.cap + m, y1 = FRAME.h - m;
     if (sx >= x0 && sx <= x1 && sy >= y0 && sy <= y1) return;
     const px = Math.max(x0, Math.min(x1, sx)), py = Math.max(y0, Math.min(y1, sy));
@@ -321,28 +354,31 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
     const fr = friendState(t), ms = meState(t);
     drawRoom(ctx);
     if (!ui.noSeat) drawRoute(ctx, ui.map ? 0 : fr.S);
-    drawDoor(ctx, ui.map ? 0 : fr.S);
+    inRoom(ctx, () => drawDoor(ctx, ui.map ? 0 : fr.S));
 
     // target ring under me until the friend arrives
     if (!ui.noSeat && t < t2e + 0.4) {
       const pulse = 0.5 + 0.5 * Math.sin(t * 5);
       ctx.strokeStyle = INK; ctx.lineWidth = 2.5; ctx.setLineDash([6, 5]);
       ctx.globalAlpha = 1 - smooth(t2e, t2e + 0.4, t);
-      ctx.beginPath(); ctx.ellipse(seat.x, seat.y, 26 + pulse * 5, 10 + pulse * 2, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(me0.x, me0.y, 26 + pulse * 5, 10 + pulse * 2, 0, 0, Math.PI * 2); ctx.stroke();
       ctx.setLineDash([]); ctx.globalAlpha = 1;
     }
 
     // characters, back to front
-    const actors = people.map((p) => ({
-      y: p.seat.y, draw: () => {
-        C.drawChair(ctx, p.seat.x, p.seat.y, -p.seat.side, SIZE, "#cfcfcf");
-        C.drawFigure(ctx, p.seat.x, p.seat.y, { size: SIZE, gender: p.gender, view: "side", facing: -p.seat.side, pose: C.sideSit(t, p.seed), ink: CROWD_INK });
-      },
-    }));
+    const actors = people.map((p) => {
+      const q = at(p.seat), f = faceOf(p.seat);
+      return {
+        y: q.y, draw: () => {
+          C.drawChair(ctx, q.x, q.y, f, SIZE, "#cfcfcf");
+          C.drawFigure(ctx, q.x, q.y, { size: SIZE, gender: p.gender, view: "side", facing: f, pose: C.sideSit(t, p.seed), ink: CROWD_INK });
+        },
+      };
+    });
     if (!ui.noSeat) actors.push({
-      y: seat.y + 0.1, draw: () => {
-        C.drawChair(ctx, seat.x, seat.y, meFacing, SIZE, ms.seated ? INK : "#bbb");
-        C.drawFigure(ctx, seat.x, seat.y, { size: SIZE, gender: me, view: ms.view, facing: ms.facing ?? meFacing, pose: ms.pose });
+      y: me0.y + 0.1, draw: () => {
+        C.drawChair(ctx, me0.x, me0.y, meFacing, SIZE, ms.seated ? INK : "#bbb");
+        C.drawFigure(ctx, me0.x, me0.y, { size: SIZE, gender: me, view: ms.view, facing: ms.facing ?? meFacing, pose: ms.pose });
       },
     });
     if (!ui.map) actors.push({ y: fr.y, draw: () => C.drawFigure(ctx, fr.x, fr.y, { size: SIZE, gender: friend, view: fr.view, facing: fr.facing, pose: fr.pose }) });
@@ -352,32 +388,36 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
     if (ui.showSeats) {
       for (const s of layout.seats) {
         const on = !ui.noSeat && s.id === seat.id, hov = s.id === ui.hoverId;
-        ctx.beginPath(); ctx.arc(s.x, s.y - 18, hov ? 9 : 6, 0, Math.PI * 2);
+        const q = at(s);
+        ctx.beginPath(); ctx.arc(q.x, q.y - 18, hov ? 9 : 6, 0, Math.PI * 2);
         ctx.fillStyle = on || hov ? INK : PAPER; ctx.strokeStyle = INK; ctx.lineWidth = 2;
         ctx.fill(); ctx.stroke();
       }
     }
 
     if (ui.map) {
-      if (!ui.noSeat) pill(ctx, seat.x, seat.y - 0.86 * SIZE - 14, "ME", true);
+      if (!ui.noSeat) pill(ctx, me0.x, me0.y - 0.86 * SIZE - 14, "ME", true);
       return;
     }
 
     // labels and speech
-    const meHead = seat.y - (ms.seated ? 0.86 : 1.08) * SIZE;
+    const meHead = me0.y - (ms.seated ? 0.86 : 1.08) * SIZE;
     const frHead = fr.y - 1.08 * SIZE;
     const meSays = t >= standStart + 0.45 && t < t2e + 0.3;
     const frSays = t >= t2e + 0.3;
-    const close = Math.hypot(fr.x - seat.x, fr.y - seat.y) < 90;
-    const away = Math.abs(fr.x - seat.x) > 4 ? Math.sign(fr.x - seat.x) : seat.side;
+    const close = Math.hypot(fr.x - me0.x, fr.y - me0.y) < 90;
+    const away = Math.abs(fr.x - me0.x) > 4 ? Math.sign(fr.x - me0.x) : -meFacing;
     if (fr.thinking) bubble(ctx, fr.x, frHead - 4, "?", ((t - t1e) / LOOK - 0.12) / 0.08);
     else if (!frSays && !close) pill(ctx, fr.x, frHead - 14, "YOU", false);
-    if (meSays) bubble(ctx, seat.x, meHead - 4, "Over here!", (t - standStart - 0.45) / 0.25);
-    else if (!frSays) pill(ctx, seat.x, meHead - 14, "ME", true);
+    if (meSays) bubble(ctx, me0.x, meHead - 4, "Over here!", (t - standStart - 0.45) / 0.25);
+    else if (!frSays) pill(ctx, me0.x, meHead - 14, "ME", true);
     if (frSays) bubble(ctx, fr.x + away * 10, frHead + 6, "Found you!", (t - t2e - 0.3) / 0.25, away * 62);
   }
 
-  return { duration, renderWorld, renderFrame, isMoving, camAt, shots, layout, seat, directions, timings: { t1s, t1e, t2s, t2e, standStart } };
+  // Part of the world the seat-picker map shows (skips the empty strip above the back wall).
+  const mapView = rot ? { x0: 0, y0: 0, w: H - R.y0 + 40, h: W } : { x0: 0, y0: 70, w: W, h: H - 70 };
+
+  return { duration, renderWorld, mapView, seatPos: at, renderFrame, isMoving, camAt, shots, layout, seat, directions, timings: { t1s, t1e, t2s, t2e, standStart } };
 }
 
 export { W, H };

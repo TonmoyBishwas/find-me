@@ -19,13 +19,13 @@ const DOOR_W = 64;
 // Row B = the back row. Each part is a list of group sizes (tables per group).
 // Real counts, checked in person. Still editable in Settings.
 export const DEFAULT_ROOMS = [
-  { name: "G Floor Study Room", rowA: { left: [5], right: [3] }, rowB: [7], seatsPerSide: 3 },
-  { name: "Second Floor Study Room", rowA: { left: [4], right: [4] }, rowB: [8], seatsPerSide: 3 },
-  { name: "Third Floor Study Room", rowA: { left: [3], right: [4] }, rowB: [9], seatsPerSide: 3 },
+  { name: "G Floor Study Room", rowA: { left: [5], right: [3] }, rowB: [7], seatsPerSide: 3, door: "left" },
+  { name: "Second Floor Study Room", rowA: { left: [4], right: [4] }, rowB: [8], seatsPerSide: 3, door: "bottom" },
+  { name: "Third Floor Study Room", rowA: { left: [3], right: [4] }, rowB: [9], seatsPerSide: 3, door: "bottom" },
 ];
 
-// v2: the v1 setups were guesses made before the real rooms were counted.
-const STORE_KEY = "find-me.rooms.v2";
+// Bumped whenever the built-in rooms change, so an older saved copy doesn't hide them.
+const STORE_KEY = "find-me.rooms.v3";
 
 export function loadRooms() {
   try {
@@ -46,6 +46,7 @@ export function sanitizeRoom(r) {
     rowA: { left: groups(r.rowA?.left), right: groups(r.rowA?.right) },
     rowB: groups(r.rowB),
     seatsPerSide: Math.max(1, Math.min(4, r.seatsPerSide | 0 || 3)),
+    door: r.door === "left" ? "left" : "bottom", // which wall the door is drawn on
   };
 }
 
