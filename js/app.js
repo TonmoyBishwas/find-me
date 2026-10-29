@@ -15,7 +15,7 @@ function loadPrefs() {
 }
 function savePrefs() {
   const { room, me, friend, crowd, style } = state;
-  try { localStorage.setItem(PREFS_KEY, JSON.stringify({ room, me, friend, crowd, style })); } catch {}
+  try { localStorage.setItem(PREFS_KEY, JSON.stringify({ room, me, friend, crowd, style, playing })); } catch {}
 }
 const prefs = loadPrefs();
 const state = {
@@ -27,6 +27,10 @@ const state = {
   style: STYLES.some((s) => s.id === prefs.style) ? prefs.style : STYLES[0].id,
 };
 let scene = null, t0 = performance.now(), hoverId = null, gifFile = null, gifUrl = null;
+// The preview can be paused (it's heavy on slow phones). Paused, it holds a frame: where it
+// stopped, or the last frame (null) after a rebuild.
+let playing = prefs.playing !== false, pausedT = null;
+let mapDirty = true, drawQueued = false;
 
 // ---- room + seat <-> URL hash (a link opens straight to that seat) ----
 function readHash() {
@@ -48,7 +52,7 @@ function rebuild() {
     ? "The door is on the left, so the map's top is your left as you walk in."
     : "The door is at the bottom, so the map's left is your left as you walk in.";
   resize();
-  t0 = performance.now();
+  t0 = performance.now(); pausedT = null;
   clearGif();
   writeHash();
   savePrefs();
@@ -80,7 +84,18 @@ for (const seg of document.querySelectorAll("[data-who]")) {
   });
 }
 $("crowd").addEventListener("change", (e) => { state.crowd = e.target.checked; rebuild(); });
-$("replay").onclick = () => { t0 = performance.now(); };
+function setPlaying(on, remember = true) {
+  if (on !== playing) {
+    if (on) t0 = performance.now() - (pausedT ?? 0) * 1000;
+    else pausedT = previewT(performance.now());
+    playing = on;
+    if (remember) savePrefs();
+  }
+  $("playPause").textContent = playing ? "Pause" : "Play";
+  requestDraw();
+}
+$("playPause").onclick = () => setPlaying(!playing);
+$("replay").onclick = () => { pausedT = 0; t0 = performance.now(); setPlaying(true); };
 $("themeToggle").onclick = () => {
   const dark = document.documentElement.dataset.theme !== "dark";
   if (dark) document.documentElement.dataset.theme = "dark"; else delete document.documentElement.dataset.theme;
@@ -98,6 +113,7 @@ function resize() {
   phone.width = f.w * dpr; phone.height = f.h * dpr;
   // keep a tall frame on screen
   phone.parentElement.style.maxWidth = `${Math.min(340, Math.max(220, (innerHeight * 0.66 - 20) * f.w / f.h))}px`;
+  mapDirty = true; requestDraw(); // resizing a canvas clears it
 }
 resize();
 window.addEventListener("resize", resize);
@@ -115,29 +131,46 @@ function seatAt([x, y]) {
   }
   return best;
 }
-map.addEventListener("pointermove", (e) => { hoverId = seatAt(toWorld(e))?.id ?? null; });
-map.addEventListener("pointerleave", () => { hoverId = null; });
+function setHover(id) {
+  if (id !== hoverId) { hoverId = id; mapDirty = true; requestDraw(); }
+}
+map.addEventListener("pointermove", (e) => setHover(seatAt(toWorld(e))?.id ?? null));
+map.addEventListener("pointerleave", () => setHover(null));
 map.addEventListener("click", (e) => {
   const s = seatAt(toWorld(e));
   if (s) { state.seat = s.id; rebuild(); }
 });
 
+function previewT(now) {
+  if (!playing) return pausedT ?? scene.duration;
+  const t = ((now - t0) / 1000) % (scene.duration + 0.6); // short pause, then loop like the GIF
+  return Math.min(t, scene.duration);
+}
+
+// Frames are drawn only while the preview plays, or once after something changes. The map is
+// still, so it's redrawn only when it changes.
+function requestDraw() {
+  if (!drawQueued && scene) { drawQueued = true; requestAnimationFrame(frame); }
+}
 function frame(now) {
+  drawQueued = false;
   const v = scene.mapView, dpr = map.width / v.w;
-  mapCtx.setTransform(dpr, 0, 0, dpr, -v.x0 * dpr, -v.y0 * dpr);
-  scene.renderWorld(mapCtx, 0, { map: true, showSeats: true, hoverId, noSeat: !state.seat });
+  if (mapDirty) {
+    mapCtx.setTransform(dpr, 0, 0, dpr, -v.x0 * dpr, -v.y0 * dpr);
+    scene.renderWorld(mapCtx, 0, { map: true, showSeats: true, hoverId, noSeat: !state.seat });
+    mapDirty = false;
+  }
 
   phoneCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
   if (state.seat) {
-    const t = ((now - t0) / 1000) % (scene.duration + 0.6); // short pause, then loop like the GIF
-    scene.renderFrame(phoneCtx, Math.min(t, scene.duration));
+    scene.renderFrame(phoneCtx, previewT(now));
   } else {
     const f = scene.frame;
     phoneCtx.fillStyle = "#fff"; phoneCtx.fillRect(0, 0, f.w, f.h);
     phoneCtx.fillStyle = "#777"; phoneCtx.textAlign = "center"; phoneCtx.font = `28px ${FONT}`;
     phoneCtx.fillText("Tap your seat on the map", f.w / 2, f.h / 2);
   }
-  requestAnimationFrame(frame);
+  if (playing && state.seat) requestDraw();
 }
 
 // ---- GIF + sharing ----
@@ -151,6 +184,7 @@ $("makeGif").onclick = async () => {
   if (!state.seat) { $("directions").textContent = "Pick your seat on the map first"; return; }
   const btn = $("makeGif"), bar = $("progress");
   btn.disabled = true; bar.hidden = false; bar.value = 0;
+  setPlaying(false, false); // the live preview and the encoder together make slow phones crawl
   try {
     const blob = await exportGif(scene, { width: +$("gifSize").value, onProgress: (p) => (bar.value = p) });
     clearGif();
@@ -230,5 +264,5 @@ $("copyRooms").onclick = async () => {
 // ---- boot ----
 readHash();
 $("crowd").checked = state.crowd;
-document.fonts.load(`24px ${FONT}`).finally(() => { rebuild(); requestAnimationFrame(frame); });
+document.fonts.load(`24px ${FONT}`).finally(() => { rebuild(); setPlaying(playing, false); });
 window.__app = { get scene() { return scene; }, state, rebuild };
