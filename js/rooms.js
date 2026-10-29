@@ -7,25 +7,26 @@ export const ROOM = { x0: 40, x1: 920, y0: 110, y1: 630 };
 
 const TABLE_T = 22;        // table thickness (short side)
 const SEAT_OFF = 14;       // seat distance from the table edge
-const GROUP_GAP = 26;      // extra walkway between groups of tables
+const GROUP_GAP = 26;      // extra walkway between groups of tables in Row A
 const DOOR_GAP = 150;      // walkway in Row A in front of the door
+const B_GAP = 130;         // a wide walkway where the back row is split into groups
 const SIDE_MARGIN = 52;    // walkway between outer tables and side walls
 const BACK_GAP = 40;       // space between back wall and Row B
-const MID_AISLE = 90;      // aisle between Row B and Row A
-const FRONT_ZONE = 98;     // space between Row A and the door wall
+const MIN_AISLE = 120;     // aisle between Row B and Row A (at least)
+const MAX_PITCH = 120;     // tables are spread across the room, but not further apart than this
 const DOOR_W = 64;
 
 // Row A = the row nearest the door, split by the door into a left part and a right part.
 // Row B = the back row. Each part is a list of group sizes (tables per group).
 // Real counts, checked in person. Still editable in Settings.
 export const DEFAULT_ROOMS = [
-  { name: "G Floor Study Room", rowA: { left: [5], right: [3] }, rowB: [7], seatsPerSide: 3, door: "left" },
+  { name: "G Floor Study Room", rowA: { left: [5], right: [3] }, rowB: [3, 4], seatsPerSide: 3, door: "left" },
   { name: "Second Floor Study Room", rowA: { left: [4], right: [4] }, rowB: [8], seatsPerSide: 3, door: "bottom" },
   { name: "Third Floor Study Room", rowA: { left: [3], right: [4] }, rowB: [9], seatsPerSide: 3, door: "bottom" },
 ];
 
 // Bumped whenever the built-in rooms change, so an older saved copy doesn't hide them.
-const STORE_KEY = "find-me.rooms.v3";
+const STORE_KEY = "find-me.rooms.v4";
 
 export function loadRooms() {
   try {
@@ -58,28 +59,28 @@ const sum = (a) => a.reduce((x, y) => x + y, 0);
 
 export function buildLayout(room) {
   const R = ROOM;
-  const usableH = R.y1 - R.y0 - BACK_GAP - MID_AISLE - FRONT_ZONE;
-  const tableLen = Math.min(146, usableH / 2);
+  // Row A stands against the door wall: no walkway between it and the wall.
+  const usableH = R.y1 - R.y0 - BACK_GAP;
+  const tableLen = Math.min(170, (usableH - MIN_AISLE) / 2);
   const seatPitch = (tableLen - 14) / room.seatsPerSide;
 
+  // Each row is spread across the room on its own, so neither row leaves empty ends.
   const nA = sum(room.rowA.left) + sum(room.rowA.right);
   const gA = Math.max(0, room.rowA.left.length - 1) + Math.max(0, room.rowA.right.length - 1);
   const nB = sum(room.rowB);
   const gB = Math.max(0, room.rowB.length - 1);
   const inner = R.x1 - R.x0 - 2 * SIDE_MARGIN;
-  const pitch = Math.min(
-    96,
-    nB ? (inner - gB * GROUP_GAP) / nB : 96,
-    nA ? (inner - gA * GROUP_GAP - DOOR_GAP) / nA : 96,
-  );
+  const pitchA = nA ? Math.min(MAX_PITCH, (inner - gA * GROUP_GAP - DOOR_GAP) / nA) : MAX_PITCH;
+  const pitchB = nB ? Math.min(MAX_PITCH, (inner - gB * B_GAP) / nB) : MAX_PITCH;
+  const pitch = Math.min(pitchA, pitchB);
 
-  const yB = R.y0 + BACK_GAP, yA = yB + tableLen + MID_AISLE;
+  const yB = R.y0 + BACK_GAP, yA = R.y1 - tableLen;
   const cx = (R.x0 + R.x1) / 2;
   const tables = [];
 
-  const place = (row, groupsList, x, y) => {
+  const place = (row, groupsList, x, y, pitch, gap) => {
     for (let gi = 0; gi < groupsList.length; gi++) {
-      if (gi) x += GROUP_GAP;
+      if (gi) x += gap;
       for (let k = 0; k < groupsList[gi]; k++) {
         tables.push({ row, x: x + pitch / 2, y0: y, y1: y + tableLen, group: gi });
         x += pitch;
@@ -89,16 +90,16 @@ export function buildLayout(room) {
   };
 
   // Row B centred
-  const widthB = nB * pitch + gB * GROUP_GAP;
-  place("B", room.rowB, cx - widthB / 2, yB);
+  const widthB = nB * pitchB + gB * B_GAP;
+  place("B", room.rowB, cx - widthB / 2, yB, pitchB, B_GAP);
 
   // Row A centred, with the door gap between its left and right parts
-  const wl = sum(room.rowA.left) * pitch + Math.max(0, room.rowA.left.length - 1) * GROUP_GAP;
-  const wr = sum(room.rowA.right) * pitch + Math.max(0, room.rowA.right.length - 1) * GROUP_GAP;
+  const wl = sum(room.rowA.left) * pitchA + Math.max(0, room.rowA.left.length - 1) * GROUP_GAP;
+  const wr = sum(room.rowA.right) * pitchA + Math.max(0, room.rowA.right.length - 1) * GROUP_GAP;
   const startA = cx - (wl + DOOR_GAP + wr) / 2;
-  place("A", room.rowA.left, startA, yA);
+  place("A", room.rowA.left, startA, yA, pitchA, GROUP_GAP);
   const doorX = startA + wl + DOOR_GAP / 2;
-  place("A", room.rowA.right, startA + wl + DOOR_GAP, yA);
+  place("A", room.rowA.right, startA + wl + DOOR_GAP, yA, pitchA, GROUP_GAP);
 
   const seats = [];
   for (const t of tables) {

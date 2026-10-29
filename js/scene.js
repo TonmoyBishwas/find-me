@@ -64,7 +64,8 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
   const tbl = seat.table;
   const beside = layout.tables.filter((o) => o.row === tbl.row && (seat.side < 0 ? o.x < tbl.x : o.x > tbl.x));
   const edge = seat.side < 0 ? Math.max(R.x0, ...beside.map((o) => o.x1)) : Math.min(R.x1, ...beside.map((o) => o.x0));
-  const goal = [(edge + (seat.side < 0 ? tbl.x0 : tbl.x1)) / 2, seat.y + 42];
+  // The front row stands against the door wall, so never aim past the wall.
+  const goal = [(edge + (seat.side < 0 ? tbl.x0 : tbl.x1)) / 2, Math.min(seat.y + 42, R.y1 - 22)];
 
   const rand = rng(`${room.name}|${seat.id}`);
   const people = layout.seats
@@ -219,15 +220,17 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
       ctx.textAlign = align; ctx.fillText(txt, 0, 0); ctx.restore();
     };
     const tb = layout.tables.find((t) => t.row === "B"), ta = layout.tables.find((t) => t.row === "A");
+    // The front row reaches the door wall, so the side labels go in the aisle between the rows.
+    const ay = tb && ta ? (tb.y1 + ta.y0) / 2 : R.y1 - 22;
     if (rot) {
-      label("↑ left side", R.x0 + 18, R.y1 - 22, "left");
-      label("↓ right side", R.x1 - 18, R.y1 - 22, "left");
+      label("↑ left side", R.x0 + 18, ay, "center");
+      label("↓ right side", R.x1 - 18, ay, "center");
       label("DOOR", door.x + door.w / 2 + 26, R.y1 + 30, "center");
       if (tb) label("back row", R.x1 - 18, (tb.y0 + tb.y1) / 2, "center");
       if (ta) label("front row", R.x1 - 18, (ta.y0 + ta.y1) / 2, "center");
     } else {
-      label("← left side", R.x0 + 18, R.y1 - 22, "left");
-      label("right side →", R.x1 - 18, R.y1 - 22, "right");
+      label("← left side", R.x0 + 18, ay, "left");
+      label("right side →", R.x1 - 18, ay, "right");
       label("DOOR", door.x + door.w / 2 + 10, R.y1 + 24, "left");
       if (tb) label("back row", R.x0 + 20, (tb.y0 + tb.y1) / 2, "center", true);
       if (ta) label("front row", R.x0 + 20, (ta.y0 + ta.y1) / 2, "center", true);
@@ -256,16 +259,24 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
     ctx.stroke();
   }
 
+  // A plan-view door: frame posts, a swing arc, and a door leaf with a handle. It rests ajar and
+  // swings wide open while the friend walks through.
   function drawDoor(ctx, S) {
     const open = smooth(108 - 90, 108 - 35, S) * (1 - smooth(m1.length + 40, m1.length + 130, S));
-    const a = open * Math.PI / 2 * 0.96;
-    const hx = door.x - door.w / 2, hy = R.y1;
-    if (open > 0.02) {
-      ctx.strokeStyle = FLOOR_INK; ctx.lineWidth = 1.5; ctx.setLineDash([4, 5]);
-      ctx.beginPath(); ctx.arc(hx, hy, door.w, -a, 0); ctx.stroke(); ctx.setLineDash([]);
-    }
-    ctx.strokeStyle = INK; ctx.lineWidth = 5; ctx.lineCap = "round";
-    ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(hx + Math.cos(-a) * door.w, hy + Math.sin(-a) * door.w); ctx.stroke();
+    const a = (0.22 + 0.74 * open) * Math.PI / 2;
+    const hx = door.x - door.w / 2, hy = R.y1, L = door.w - 4;
+    ctx.strokeStyle = FLOOR_INK; ctx.lineWidth = 1.5; ctx.setLineDash([4, 5]);
+    ctx.beginPath(); ctx.arc(hx, hy, L, -Math.PI / 2, 0); ctx.stroke(); ctx.setLineDash([]);
+    // frame posts on both sides of the opening
+    ctx.fillStyle = INK;
+    ctx.fillRect(hx - 4, hy - 8, 8, 16);
+    ctx.fillRect(door.x + door.w / 2 - 4, hy - 8, 8, 16);
+    // the leaf
+    ctx.save(); ctx.translate(hx, hy); ctx.rotate(-a);
+    ctx.fillStyle = PAPER; ctx.strokeStyle = INK; ctx.lineWidth = 2.5; ctx.lineJoin = "round";
+    ctx.beginPath(); ctx.roundRect(2, -3.5, L - 2, 7, 2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = INK; ctx.beginPath(); ctx.arc(L - 8, -7, 2.6, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
   }
 
   function drawRoute(ctx, S) {
