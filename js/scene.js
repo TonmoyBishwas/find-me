@@ -13,6 +13,7 @@ const INK = "#111", PAPER = "#fff", CROWD_INK = "#b0b0b0", FLOOR_INK = "#c9c9c9"
 // The one colour in the picture: my bench, filled like a highlighter, so it stands out at a glance.
 export const ACCENT = [255, 212, 59];
 const ACCENT_CSS = `rgb(${ACCENT})`;
+const ACCENT_PALE_CSS = `rgb(${ACCENT.map((v) => Math.round(v + (255 - v) * 0.5))})`; // the rest of my bench (a GIF palette blend)
 const SIZE = 64;
 const LOOK = 1.3, START_IDLE = 1.35;
 
@@ -303,8 +304,26 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
   let hlTable = null; // my bench, once a seat is picked
   function drawTable(ctx, t) {
     const b = box(t.x0, t.y0, t.x1, t.y1);
-    ctx.fillStyle = t === hlTable ? ACCENT_CSS : PAPER; ctx.strokeStyle = INK; ctx.lineWidth = 3; ctx.lineJoin = "round";
-    ctx.beginPath(); ctx.roundRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0, 3); ctx.fill(); ctx.stroke();
+    const mine = t === hlTable;
+    ctx.fillStyle = mine ? ACCENT_PALE_CSS : PAPER; ctx.strokeStyle = INK; ctx.lineWidth = 3; ctx.lineJoin = "round";
+    ctx.beginPath(); ctx.roundRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0, 3); ctx.fill();
+    if (mine) {
+      // My bench: pale, split into one part per seat, with my part solid and outlined.
+      // Turned, people sit 12 further along than seen from the side (where that's their feet).
+      const n = seat.count, len = (layout.tableLen - 14) / n, at0 = t.y0 + 7 + (rot ? 12 : 0);
+      const cut = (i) => (i === 0 ? t.y0 : i === n ? t.y1 : at0 + i * len); // the end parts run to the table's ends
+      const part = (i) => box(t.x0, cut(i), t.x1, cut(i + 1));
+      ctx.strokeStyle = "#8a8a8a"; ctx.lineWidth = 1.5;
+      for (let i = 1; i < n; i++) {
+        const [x0, y0] = P(t.x0, cut(i)), [x1, y1] = P(t.x1, cut(i));
+        ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+      }
+      const p = part(seat.index);
+      ctx.fillStyle = ACCENT_CSS; ctx.strokeStyle = INK; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.rect(p.x0, p.y0, p.x1 - p.x0, p.y1 - p.y0); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.roundRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0, 3);
+    }
+    ctx.stroke();
     ctx.fillStyle = INK; ctx.fillRect(b.x0, b.y1 - 1, b.x1 - b.x0, 6);
   }
 
