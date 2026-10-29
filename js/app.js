@@ -170,7 +170,7 @@ $("makeGif").onclick = async () => {
 $("share").onclick = async () => {
   if (!gifFile) return;
   try {
-    await navigator.share({ files: [gifFile], text: `I'm here: ${rooms[state.room].name}` });
+    await navigator.share({ files: [gifFile], text: "I'm here" // just this: a watch notification shouldn't give away where, so they open the GIF });
   } catch (e) {
     if (e.name !== "AbortError") $("download").click();
   }
