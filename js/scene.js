@@ -82,17 +82,23 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
   const edge = seat.side < 0 ? Math.max(R.x0, ...beside.map((o) => o.x1)) : Math.min(R.x1, ...beside.map((o) => o.x0));
   const step = rot ? 42 : SIZE + 8;
   // The front row stands against the door wall: if there's no room past me, stop just before me.
-  const goal = [(edge + (seat.side < 0 ? tbl.x0 : tbl.x1)) / 2, seat.y + step <= R.y1 - 22 ? seat.y + step : seat.y - step];
+  const gy = seat.y + step <= R.y1 - 22 ? seat.y + step : seat.y - step;
+  const near = seat.side < 0 ? tbl.x0 : tbl.x1, gap = Math.abs(edge - near);
+  // Turned, a walkway is shorter on screen than a standing figure, so the friend walks to the
+  // walkway beside me (never out into the wide gap by the door) and then steps to where she stands
+  // clear of the next table: right against my table if I sit above it, level with me if below.
+  const goal = [near + seat.side * (rot ? Math.min(28, gap / 2) : gap / 2), gy];
+  const standAt = !rot ? goal : [seat.side < 0 ? near - 8 : near + 14, gy];
 
   const rand = rng(`${room.name}|${seat.id}`);
   const people = layout.seats
-    .filter((s) => s !== seat && Math.hypot(s.x - goal[0], s.y - goal[1]) > 40 && rand() < crowd)
+    .filter((s) => s !== seat && Math.hypot(s.x - standAt[0], s.y - standAt[1]) > 40 && rand() < crowd)
     .map((s) => ({ seat: s, gender: rand() < 0.5 ? "m" : "f", seed: rand() * 10 }));
 
   const grid = makeGrid(layout, people.map((p) => p.seat));
   const start = [door.x, door.y + 108], inside = [door.x, door.y - 52];
   const m1 = buildMotion([P(...start), P(...inside)]);
-  const m2 = buildMotion(planPath(grid, inside, goal).map((q) => P(...q)));
+  const m2 = buildMotion([...planPath(grid, inside, goal), ...(standAt !== goal ? [standAt] : [])].map((q) => P(...q)));
 
   const t1s = START_IDLE, t1e = t1s + m1.duration, t2s = t1e + LOOK, t2e = t2s + m2.duration;
   const standStart = Math.max(t2s + 0.4, t2e - 1.7);
@@ -239,7 +245,7 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
   }
   {
     const last = shots[shots.length - 1];
-    const g = P(...goal);
+    const g = P(...standAt);
     panTo(Math.max(meetAt, last.t + last.dur), (me0.x + g[0]) / 2, (me0.y + g[1]) / 2 - 40);
   }
   // Pull back to the whole room so the full route is the last thing they see.
@@ -252,7 +258,7 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
   for (let t = t1s; t < t2e; t += 0.05) if (friendState(t).S >= (m1.length + m2.length) / 2) { zoomAt = t; break; }
   const zoomCam = (() => {
     const z = Math.min(1.25, roomCam.z * 1.8), hw = viewRect.w / 2 / z, hh = viewRect.h / 2 / z;
-    const g = P(...goal), x = (me0.x + g[0]) / 2, y = (me0.y + g[1]) / 2 - 30;
+    const g = P(...standAt), x = (me0.x + g[0]) / 2, y = (me0.y + g[1]) / 2 - 30;
     const fit = (v, a, b, half) => (b - a <= 2 * half ? (a + b) / 2 : Math.max(a + half, Math.min(b - half, v)));
     return { x: fit(x, roomBox.x0, roomBox.x1, hw), y: fit(y, roomBox.y0, roomBox.y1, hh), z };
   })();
