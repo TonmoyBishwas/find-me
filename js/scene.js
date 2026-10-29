@@ -83,12 +83,13 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
   const step = rot ? 42 : SIZE + 8;
   // The front row stands against the door wall: if there's no room past me, stop just before me.
   const gy = seat.y + step <= R.y1 - 22 ? seat.y + step : seat.y - step;
-  const near = seat.side < 0 ? tbl.x0 : tbl.x1, gap = Math.abs(edge - near);
-  // Turned, a walkway is shorter on screen than a standing figure, so the friend walks to the
-  // walkway beside me (never out into the wide gap by the door) and then steps to where she stands
-  // clear of the next table: right against my table if I sit above it, level with me if below.
-  const goal = [near + seat.side * (rot ? Math.min(28, gap / 2) : gap / 2), gy];
-  const standAt = !rot ? goal : [seat.side < 0 ? near - 8 : near + 14, gy];
+  // Turned, a walkway is shorter on screen than a standing figure, so anyone standing in one
+  // reaches over the next table. Instead the friend walks along the walkway above my table (never
+  // out into the wide gap by the door) and steps in behind it, so the table hides her legs: beside
+  // me if I sit above it, across the table from me if I sit below it.
+  const aboveEdge = Math.max(R.x0, ...layout.tables.filter((o) => o.row === tbl.row && o.x < tbl.x).map((o) => o.x1));
+  const goal = rot ? [tbl.x0 - Math.min(28, (tbl.x0 - aboveEdge) / 2), gy] : [(edge + (seat.side < 0 ? tbl.x0 : tbl.x1)) / 2, gy];
+  const standAt = rot ? [tbl.x, gy] : goal;
 
   const rand = rng(`${room.name}|${seat.id}`);
   const people = layout.seats
@@ -290,18 +291,20 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
       ctx.save(); ctx.translate(px, py); if (vertical) ctx.rotate(-Math.PI / 2);
       ctx.textAlign = align; ctx.fillText(txt, 0, 0); ctx.restore();
     };
+    // Left and right (as you walk in) are what she needs most, so they're bigger and darker.
+    const sideLabel = (...a) => { ctx.save(); ctx.font = `bold 28px ${FONT}`; ctx.fillStyle = "#6b6b6b"; label(...a); ctx.restore(); };
     const tb = layout.tables.find((t) => t.row === "B"), ta = layout.tables.find((t) => t.row === "A");
     // The front row reaches the door wall, so the side labels go in the aisle between the rows.
     const ay = tb && ta ? (tb.y1 + ta.y0) / 2 : R.y1 - 22;
     if (rot) {
-      label("↑ left side", R.x0 + 18, ay, "center");
-      label("↓ right side", R.x1 - 18, ay, "center");
+      sideLabel("↑ Left", R.x0 + 22, ay, "center");
+      sideLabel("↓ Right", R.x1 - 22, ay, "center");
       label("DOOR", door.x + door.w / 2 + 26, R.y1 + 30, "center");
       if (tb) label("back row", R.x1 - 18, (tb.y0 + tb.y1) / 2, "center");
       if (ta) label("front row", R.x1 - 18, (ta.y0 + ta.y1) / 2, "center");
     } else {
-      label("← left side", R.x0 + 18, ay, "left");
-      label("right side →", R.x1 - 18, ay, "right");
+      sideLabel("← Left", R.x0 + 18, ay, "left");
+      sideLabel("Right →", R.x1 - 18, ay, "right");
       label("DOOR", door.x + door.w / 2 + 10, R.y1 + 24, "left");
       if (tb) label("back row", R.x0 + 20, (tb.y0 + tb.y1) / 2, "center", true);
       if (ta) label("front row", R.x0 + 20, (ta.y0 + ta.y1) / 2, "center", true);
@@ -550,7 +553,13 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
         if (view === "front") drawTable(ctx, seat.table);
       },
     });
-    if (!ui.map && !ui.treasure) actors.push({ y: fr.y, draw: () => C.drawFigure(ctx, fr.x, fr.y, { size: SIZE, gender: friend, view: fr.view, facing: fr.facing, pose: fr.pose }) });
+    if (!ui.map && !ui.treasure) actors.push({
+      y: fr.y, draw: () => {
+        C.drawFigure(ctx, fr.x, fr.y, { size: SIZE, gender: friend, view: fr.view, facing: fr.facing, pose: fr.pose });
+        // Turned, she ends up behind my table: it hides her legs as she steps in.
+        if (rot) { const b = box(tbl.x0, tbl.y0, tbl.x1, tbl.y1); if (fr.y > b.y0 && fr.y < b.y1 + 6) drawTable(ctx, tbl); }
+      },
+    });
     actors.sort((a, b) => a.y - b.y).forEach((a) => a.draw());
 
     // seat picker overlay (live preview only)
