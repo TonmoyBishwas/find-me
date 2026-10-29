@@ -10,6 +10,9 @@ export const FONT = '"Patrick Hand", "Comic Sans MS", "Segoe Print", cursive';
 // The ME / YOU tags use a plain font: at tag size the hand-drawn bold M reads like an H.
 const TAG_FONT = 'Arial, "Helvetica Neue", sans-serif';
 const INK = "#111", PAPER = "#fff", CROWD_INK = "#b0b0b0", FLOOR_INK = "#c9c9c9";
+// The one colour in the picture: my bench, filled like a highlighter, so it stands out at a glance.
+export const ACCENT = [255, 212, 59];
+const ACCENT_CSS = `rgb(${ACCENT})`;
 const SIZE = 64;
 const LOOK = 1.3, START_IDLE = 1.35;
 
@@ -297,9 +300,10 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
   }
 
   // Flat top plus a thin front edge (always at the bottom on screen) for a bit of depth.
+  let hlTable = null; // my bench, once a seat is picked
   function drawTable(ctx, t) {
     const b = box(t.x0, t.y0, t.x1, t.y1);
-    ctx.fillStyle = PAPER; ctx.strokeStyle = INK; ctx.lineWidth = 3; ctx.lineJoin = "round";
+    ctx.fillStyle = t === hlTable ? ACCENT_CSS : PAPER; ctx.strokeStyle = INK; ctx.lineWidth = 3; ctx.lineJoin = "round";
     ctx.beginPath(); ctx.roundRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0, 3); ctx.fill(); ctx.stroke();
     ctx.fillStyle = INK; ctx.fillRect(b.x0, b.y1 - 1, b.x1 - b.x0, 6);
   }
@@ -488,6 +492,7 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
   // { showSeats, hoverId } adds the seat dots.
   function renderWorld(ctx, t, ui = {}) {
     const fr = friendState(t), ms = meState(t);
+    hlTable = ui.noSeat ? null : tbl;
     drawRoom(ctx);
     if (!ui.noSeat) drawRoute(ctx, ui.map ? 0 : fr.S, ui.treasure);
     inRoom(ctx, () => drawDoor(ctx, ui.map ? 0 : fr.S));

@@ -13,7 +13,7 @@
   :root { --ink:#111; --paper:#fff; --muted:#6b6b6b; --line:#d9d9d9; }
   /* Dark mode is only for this page. The canvases are inverted on screen; the exported GIF stays white. */
   :root[data-theme="dark"] { --ink:#e6e6e6; --paper:#141414; --muted:#9a9a9a; --line:#33353a; color-scheme:dark; }
-  :root[data-theme="dark"] canvas { filter:invert(.92); }
+  :root[data-theme="dark"] canvas { filter:invert(.92) hue-rotate(180deg); } /* hue-rotate keeps the accent yellow */
   .theme-dark-icon { display:none; }
   :root[data-theme="dark"] .theme-dark-icon { display:block; }
   :root[data-theme="dark"] .theme-light-icon { display:none; }
