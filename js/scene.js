@@ -7,6 +7,8 @@ import { makeGrid, planPath, buildMotion } from "./path.js";
 import * as C from "./character.js";
 
 export const FONT = '"Patrick Hand", "Comic Sans MS", "Segoe Print", cursive';
+// The ME / YOU tags use a plain font: at tag size the hand-drawn bold M reads like an H.
+const TAG_FONT = 'Arial, "Helvetica Neue", sans-serif';
 const INK = "#111", PAPER = "#fff", CROWD_INK = "#b0b0b0", FLOOR_INK = "#c9c9c9";
 const SIZE = 64;
 const LOOK = 1.3, START_IDLE = 1.35;
@@ -392,7 +394,7 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
   let labelK = 1;
   function pill(ctx, x, y, text, dark) {
     ctx.save(); ctx.translate(x, y + 12); ctx.scale(labelK, labelK); ctx.translate(0, -12);
-    ctx.font = `bold 17px ${FONT}`;
+    ctx.font = `bold 14px ${TAG_FONT}`;
     const w = ctx.measureText(text).width + 16;
     ctx.fillStyle = dark ? INK : PAPER; ctx.strokeStyle = INK; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.roundRect(-w / 2, -12, w, 24, 12); ctx.fill(); ctx.stroke();
@@ -455,7 +457,7 @@ export function createScene(room, seatId, { me = "m", friend = "f", crowd = 0.35
     ctx.beginPath(); ctx.moveTo(30, 0); ctx.lineTo(16, -9); ctx.lineTo(16, 9); ctx.closePath(); ctx.fill();
     ctx.restore();
     ctx.beginPath(); ctx.roundRect(-22, -13, 44, 26, 13); ctx.fill();
-    ctx.fillStyle = PAPER; ctx.font = `bold 18px ${FONT}`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillStyle = PAPER; ctx.font = `bold 15px ${TAG_FONT}`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
     ctx.fillText("ME", 0, 1);
     ctx.restore();
   }
